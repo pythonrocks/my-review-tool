@@ -1,0 +1,24 @@
+name: ci
+
+# Manual only: disabled until the repo is public or the budget allows macOS runners.
+on: workflow_dispatch
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # tags, for the app version
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+      - run: make lint
+      - run: make app
+      - run: make dmg
+      - uses: actions/upload-artifact@v5
+        with:
+          name: myReview-dmg
+          path: bin/myReview.dmg
+          if-no-files-found: error

@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["findings"],
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "file", "line", "description", "title", "suggested_comment"],
+        "properties": {
+          "severity": {"type": "string", "enum": ["Critical", "High", "Medium", "Low"]},
+          "file": {"type": "string", "description": "Path relative to the checkout root."},
+          "line": {"type": "integer", "description": "Line number, or 0 for the whole file."},
+          "description": {"type": "string"},
+          "title": {"type": "string", "description": "Short one-line title naming the problem, at most 80 characters."},
+          "suggested_comment": {"type": "string", "description": "Comment to the PR author, ready to post as an inline review comment on that line: what is wrong and how to fix it, constructive, no severity prefix."}
+        }
+      }
+    }
+  }
+}

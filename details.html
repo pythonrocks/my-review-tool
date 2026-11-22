@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{.PR.Repo}} #{{.PR.Number}} — myReview</title>
+<link rel="stylesheet" href="/myreview.css">
+<meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"^(400|409|500|502)$","swap":true,"error":true},{"code":"[45]..","swap":false,"error":true}]}'>
+<script src="/static/htmx.min.js" defer></script>
+<script src="/static/details.js" defer></script>
+<script src="/static/links.js" defer></script>
+<script type="module" src="/wails/runtime.js"></script>
+</head>
+<body data-results="{{.Results}}">
+<div class="page">
+<a class="back-link" href="{{.Back}}">Back to the dashboard</a>
+<div class="pr-head">
+<div>
+<h1 class="pr-title"><span class="repo">{{.PR.Repo}}</span> <span class="num">#{{.PR.Number}}</span> {{.PR.Title}}</h1>
+<ul class="meta">
+<li>Author <strong>{{.PR.Author}}</strong></li>
+<li>Age <strong>{{age .PR.Created}}</strong></li>
+<li>Draft <strong>{{if .PR.Draft}}yes{{else}}no{{end}}</strong></li>
+{{if and .Review.HeadSHA (or (eq .Review.Status "done") (eq .Review.Status "failed"))}}<li>Reviewed <code class="sha">{{short .Review.HeadSHA}}</code></li>
+{{end}}<li><span class="badge {{statusClass .Review}}">{{if eq .Review.Status "done"}}{{if .Review.Outdated}}outdated: {{end}}done{{else}}{{or (status .Review) "not queued"}}{{end}}</span></li>
+<li>Approvals <strong>{{(approvals .PR .Login).Text}}</strong></li>
+</ul>
+</div>
+<div class="pr-actions">
+<a class="gh-link" href="{{.PR.URL}}">Open on GitHub ↗</a>
+{{if ne .Review.Status "skipped"}}<form method="post" action="/rerun" hx-post="/rerun" hx-swap="none" class="page-action"><input type="hidden" name="repo" value="{{.PR.Repo}}"><input type="hidden" name="number" value="{{.PR.Number}}"><input type="hidden" name="from" value="details"><button class="btn-sm btn-quiet">{{if eq .Review.Status "on demand"}}Review{{else}}Re-run review{{end}}</button></form>
+{{end}}</div>
+</div>
+<div id="update-slot" role="status" hx-get="/pr/{{.PR.Repo}}/{{.PR.Number}}/status?results={{.Results}}&amp;head={{.PR.HeadSHA}}&amp;view={{.View}}" hx-trigger="every 15s" hx-swap="innerHTML"></div>
+{{if .Review.Outdated}}<p class="alert alert-warning"><span>These results are for commit <code class="sha">{{short .Review.HeadSHA}}</code>; the pull request is now at <code class="sha">{{short .PR.HeadSHA}}</code>. {{if .PR.Draft}}Draft: click Re-run to review the new commits.{{else}}A new review is queued {{.QuietPeriod}} after the last push.{{end}}</span></p>
+{{end}}{{with .Submitted}}<p class="alert alert-success" role="status"><span>{{.}}</span></p>
+{{end}}<div class="decision-bar{{if .Compact}} compact{{end}}">
+<div class="verdict">
+{{if eq .Review.Status "done"}}{{with .Review.Recommendation}}<span class="rec {{recClass .}}">{{recLabel .}}</span>
+{{end}}{{with .Review.Risk}}<span class="badge risk risk-{{lower .}}">{{.}} risk</span>
+{{end}}<span class="verdict-counts">{{.Counts}}</span>
+{{template "progress" .}}
+{{if not .Compact}}{{with .Reasons}}<div class="verdict-reasons">{{range .}}<span class="text">{{.}}</span>{{end}}</div>
+{{end}}{{end}}{{else if eq .Review.Status "failed"}}<p class="alert alert-error"><span>Review failed at {{.Review.FailedStep}}: {{.Review.Reason}}.</span></p>
+{{else if eq .Review.Status "skipped"}}<p class="alert alert-info"><span>{{status .Review}}</span></p>
+{{else if eq .Review.Status "on demand"}}<p class="alert alert-info">Not reviewed automatically: {{.Review.Reason}}. Click Review to start it.</p>
+{{else if eq .Review.Status "running"}}<p class="alert alert-info"><span>Review running.</span></p>
+{{else if eq .Review.Status "queued"}}<p class="alert alert-info"><span>Review queued.</span></p>
+{{else}}<p class="alert alert-info"><span>Review not queued yet.</span></p>
+{{end}}</div>
+{{if .Compact}}<div class="review-controls">
+<button type="button" class="link-btn" hx-get="/pr/{{.PR.Repo}}/{{.PR.Number}}/review/summary?event=COMMENT" hx-target="#dialog-slot">Comment or request changes…</button>
+{{if not .OwnPR}}<form hx-post="/pr/{{.PR.Repo}}/{{.PR.Number}}/review" hx-target="#dialog-slot" hx-disabled-elt="find button" hx-indicator="find button"><input type="hidden" name="event" value="APPROVE"><input type="hidden" name="rev" value="{{.Rev}}"><input type="hidden" name="head" value="{{.PR.HeadSHA}}"><input type="hidden" name="expect" value="{{.ApproveExpect}}"><button>Approve</button></form>
+{{end}}</div>
+{{else}}<form class="review-controls" hx-get="/pr/{{.PR.Repo}}/{{.PR.Number}}/review/summary" hx-target="#dialog-slot">
+<fieldset class="seg"><legend class="visually-hidden">Review decision</legend>
+{{if not .OwnPR}}<input type="radio" class="visually-hidden" name="event" value="APPROVE" id="decision-approve"><label for="decision-approve">Approve</label>
+<input type="radio" class="visually-hidden" name="event" value="REQUEST_CHANGES" id="decision-request"><label for="decision-request">Request changes</label>
+{{end}}<input type="radio" class="visually-hidden" name="event" value="COMMENT" id="decision-comment" checked><label for="decision-comment">Comment</label>
+</fieldset>
+{{template "submit-count" .}}
+</form>
+{{end}}{{with .ConfirmLines}}<div class="confirm-lines">
+<p>Approving needs confirmation:</p>
+<ul class="reasons">
+{{range .}}<li class="text">{{.}}</li>
+{{end}}</ul>
+</div>
+{{end}}<div id="pending-error" role="alert"></div>
+</div>
+{{if .Approved}}<p class="alert alert-success"><span>You approved commit <code class="sha">{{short .PR.HeadSHA}}</code>.</span></p>
+{{end}}{{with .ApprovedError}}<p class="alert alert-warning"><span>Could not check your approvals on GitHub: {{.}}</span></p>
+{{end}}{{with .ThreadsError}}<p class="alert alert-warning"><span>Could not load GitHub discussions: {{.}}</span></p>
+{{end}}<nav class="view-tabs">
+<a href="?view=list"{{if eq .View "list"}} aria-current="page"{{end}}>What to check <span class="pill pill-quiet">{{len .Items}}</span></a>
+<a href="?view=diff"{{if eq .View "diff"}} aria-current="page"{{end}}>Diff</a>
+</nav>
+{{if eq .View "diff"}}{{template "diff" .}}
+{{else if eq .Review.Status "done"}}<section class="context clamped">
+<h2>Context</h2>
+{{with .Review.Summary}}<pre class="text">{{.}}</pre>
+{{else}}<p>No overview.</p>
+{{end}}{{if .LongSummary}}<input type="checkbox" id="context-more" class="visually-hidden"><label for="context-more" class="link-btn"><span class="more">Show more</span><span class="less">Show less</span></label>
+{{end}}</section>
+<p class="policy muted">Severity threshold {{.Review.Threshold}} ({{.Review.ThresholdSource}}) · Sensitive areas: {{with .Review.SensitiveAreas}}{{join . ", "}}{{else}}none{{end}} ({{.Review.AreasSource}})</p>
+{{template "run-metrics" .Review.Metrics}}{{with .ThreadsHead}}<p class="alert alert-info"><span>GitHub discussions are shown when the review is of the current head (<code class="sha">{{short .}}</code>).</span></p>
+{{end}}{{if not .Items}}<p>Nothing to check: no findings and no points of interest.</p>
+{{end}}{{if or .Items .Comments}}<section class="panel flush">
+<h2 class="visually-hidden">What to check</h2>
+<ul class="points">
+{{range .Items}}<li class="point" id="pt-{{.ID}}">{{template "check" .}}<details hx-get="/pr/{{$.PR.Repo}}/{{$.PR.Number}}/points/{{.ID}}" hx-trigger="toggle once" hx-target="find .point-body" hx-swap="outerHTML">{{template "point-summary" .}}
+{{template "point-body" .}}</details></li>
+{{end}}{{with .Comments}}<li class="group-label">Your comments</li>
+{{range .}}<li class="point" id="pt-{{.ID}}"><details><summary class="point-toggle"><span class="point-no"></span><span><span class="badge plain">Comment</span></span><span class="point-title"></span><span class="point-loc" title="{{.File}}{{if .Line}}:{{.Line}}{{end}}{{with .Draft.OutdatedFrom}} (on {{short .}}){{end}}"><span>{{.File}}</span>{{if .Line}}<span>:{{.Line}}</span>{{end}}{{with .Draft.OutdatedFrom}}<span> (on {{short .}})</span>{{end}}</span><span class="point-meta">{{template "thread-mark" .}}{{template "state" .}}</span><span class="chev"></span></summary>
+<div class="point-body">
+{{template "threads" .Threads}}{{template "editor" .}}
+{{if not .Draft.OutdatedFrom}}<div class="point-links"><a href="?view=diff#d-{{.ID}}">Open in diff →</a></div>
+{{end}}</div></details></li>
+{{end}}{{end}}</ul>
+</section>
+{{end}}{{else if eq .Review.Status "failed"}}{{template "run-metrics" .Review.Metrics}}{{end}}<div id="dialog-slot"></div>
+</div>
+</body>
+</html>
+{{define "run-metrics"}}{{with runMetrics .}}<div class="run-metrics">
+<p class="muted">AI review: {{.Summary}}</p>
+<details class="post"><summary>Run details</summary>
+<div class="table-scroll"><table>
+<thead><tr><th>Step</th><th>Agent</th><th>Model</th><th class="n">Time</th><th class="n">API time</th><th class="n">Turns</th><th class="n">Tokens in</th><th class="n">Out</th><th class="n">Cache read</th><th class="n">Cache write</th><th class="n">Cost (est.)</th><th>Result</th></tr></thead>
+<tbody>{{range .Steps}}<tr><td>{{.Step}}</td><td>{{.Agent}}</td><td>{{.Model}}</td><td class="n">{{.Time}}</td><td class="n">{{.APITime}}</td><td class="n">{{.Turns}}</td><td class="n">{{.In}}</td><td class="n">{{.Out}}</td><td class="n">{{.CacheRead}}</td><td class="n">{{.CacheWrite}}</td><td class="n">{{.Cost}}</td><td class="result">{{.Result}}</td></tr>
+{{else}}<tr><td colspan="12" class="muted">No agent steps ran.</td></tr>
+{{end}}</tbody>
+</table></div>
+<p class="muted">{{.Footer}}</p>
+</details>
+</div>
+{{end}}{{end}}
+{{define "point-body"}}<div class="point-body">
+{{with .Finding.Step}}<p class="muted">{{recLabel .}}</p>
+{{end}}<p class="point-text">{{.Text}}</p>
+{{if .Excerpt}}<div class="excerpt" hx-get="/pr/{{.Report.Repo}}/{{.Report.Number}}/points/{{.ID}}/excerpt" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+{{end}}{{template "threads" .Threads}}<div class="point-links"><a href="/pr/{{.Report.Repo}}/{{.Report.Number}}?view=diff&point={{.ID}}#d-{{.ID}}">Open in diff →</a><a class="loc" href="https://github.com/{{.Report.Repo}}/blob/{{.Report.SHA}}/{{pathEscape .File}}{{if .Line}}#L{{.Line}}{{end}}">{{.File}}{{if .Line}}:{{.Line}}{{end}}</a>{{if or .Prev .Next}}<span class="sep"></span>{{end}}{{with .Prev}}<a class="point-nav" href="#{{$.Anchor}}{{.}}">← Previous</a>{{end}}{{with .Next}}<a class="point-nav" href="#{{$.Anchor}}{{.}}">Next →</a>{{end}}</div>
+<div class="suggested"><p class="muted">Suggested comment</p><pre class="text">{{.Comment}}</pre></div>
+{{template "editor" .}}
+</div>{{end}}
+{{define "editor"}}<div class="editor">
+{{if .Draft.Unflagged}}<p class="muted">No longer flagged by the review.</p>
+{{end}}<label class="label" for="ta-{{.ID}}">Your comment on {{.File}}{{if .Line}}:{{.Line}}{{end}}</label>
+{{if comment .ID}}<input type="hidden" name="path" value="{{.File}}"><input type="hidden" name="line" value="{{.Line}}">
+{{end}}<textarea id="ta-{{.ID}}" name="text" rows="6"{{if .Draft.PostedURL}} readonly{{else}} hx-put="/pr/{{.Report.Repo}}/{{.Report.Number}}/drafts/{{.ID}}" hx-trigger="input changed delay:800ms" hx-target="#es-{{.ID}}" hx-swap="outerHTML"{{if comment .ID}} hx-include="closest .editor"{{end}}{{end}}>
+{{.Draft.Text}}</textarea>
+{{template "editor-actions" .}}
+</div>{{end}}
+{{define "excerpt"}}{{with .}}<div class="code"><div class="code-lines">
+{{range .}}<div class="dl{{if eq .Kind "focus"}} focus{{end}}"><span class="dl-num">{{.New}}</span><span class="dl-code">{{.Text}}</span></div>
+{{end}}</div></div>{{else}}<p class="muted">Code excerpt not available</p>{{end}}
+{{end}}
+{{define "line-comment"}}<div class="inline" id="d-{{.ID}}"><div class="inline-head"><span class="mark mine">C</span><span class="badge plain">Comment</span><span class="point-title">{{.File}}:{{.Line}}</span><span class="state {{stateClass .State}}" id="state-{{.ID}}">{{.State}}</span></div>
+<div class="inline-body">{{template "editor" .}}</div></div>
+{{end}}
+{{define "comment-form"}}<form class="inline focus" hx-post="/pr/{{.PR.Repo}}/{{.PR.Number}}/drafts" hx-swap="outerHTML"><div class="inline-head"><span class="label">New comment on line {{.Line}}</span></div>
+<div class="inline-body">{{with .Error}}<p class="alert alert-error" role="alert"><span>{{.}}</span></p>
+{{end}}<div class="editor"><input type="hidden" name="path" value="{{.Path}}"><input type="hidden" name="line" value="{{.Line}}">
+<textarea name="text" rows="6" aria-label="Comment on {{.Path}}:{{.Line}}" required>
+{{.Text}}</textarea>
+<div class="editor-actions"><button class="btn-sm">Add comment</button></div>
+</div></div></form>
+{{end}}
+{{define "comment-added"}}{{template "line-comment" .Item}}{{template "submit-count" .Details}}{{end}}
+{{define "inline-error"}}<div class="inline"><p class="alert alert-error" role="alert"><span>{{.}}</span></p></div>
+{{end}}
+{{define "point-summary"}}<summary class="point-toggle"><span class="point-no">{{.No}}</span><span>{{with .Finding.Severity}}<span class="badge sev-{{lower .}}">{{.}}</span>{{else}}<span class="badge plain kind-point">Point</span>{{end}}</span><span class="point-title" title="{{.Title}}">{{.Title}}</span><span class="point-loc" title="{{.File}}{{if .Line}}:{{.Line}}{{end}}"><span>{{.File}}</span>{{if .Line}}<span>:{{.Line}}</span>{{end}}</span><span class="point-meta">{{template "thread-mark" .}}{{template "review-mark" .}}{{template "state" .}}</span><span class="chev"></span></summary>{{end}}
+{{define "thread-mark"}}{{with .OpenComments}}<span class="thread-mark" title="Open conversation on this line">{{.}}</span>{{end}}{{end}}
+{{define "threads"}}{{range .}}{{template "thread-entry" .}}{{end}}{{end}}
+{{define "thread-entry"}}{{if .T.Resolved}}<details class="resolved-thread"><summary>Resolved conversation</summary>
+{{template "thread" .}}</details>
+{{else}}{{template "thread" .}}
+{{end}}{{end}}
+{{define "thread"}}<div class="thread">
+<div class="thread-box">
+{{range .T.Comments}}<div class="comment"><div class="comment-meta"><strong>{{.Author}}</strong><span>{{age .Created}}</span></div><div class="comment-body">{{.Body}}</div></div>
+{{end}}{{with .T.More}}<div class="comment"><a href="{{$.URL}}">{{.}} more on GitHub</a></div>
+{{end}}{{with .Reply.Text}}<div class="comment"><div class="comment-meta"><strong>Your reply</strong><span class="state state-draft">Pending</span></div><div class="comment-body">{{.}}</div></div>
+{{end}}</div>
+{{with .Error}}<p class="alert alert-error" role="alert"><span>{{.}}</span></p>
+{{end}}<div class="editor-actions">{{if .T.Resolved}}<span class="state state-posted">Resolved</span>
+{{end}}{{if .T.CanReply}}<details class="reply"{{if .Error}} open{{end}}><summary class="btn btn-sm btn-quiet">{{if .Reply.Text}}Edit reply{{else}}Reply{{end}}</summary>
+<form class="editor" hx-post="/pr/{{.Repo}}/{{.Number}}/threads/{{pathEscape .T.ID}}/replies" hx-target="closest .thread" hx-swap="outerHTML">
+<textarea name="text" rows="4" aria-label="Reply on {{.T.Path}}{{if .T.Line}}:{{.T.Line}}{{end}}">
+{{.Text}}</textarea>
+<div class="editor-actions"><button class="btn-sm">Add reply to review</button></div>
+</form></details>
+{{end}}{{if and .T.Resolved .T.CanUnresolve}}<button class="btn-sm btn-quiet" type="button" hx-post="/pr/{{.Repo}}/{{.Number}}/threads/{{pathEscape .T.ID}}/resolve" hx-vals='{"resolved": "0"}' hx-target="closest .thread" hx-swap="outerHTML">Unresolve</button>
+{{else if and (not .T.Resolved) .T.CanResolve}}<button class="btn-sm btn-quiet" type="button" hx-post="/pr/{{.Repo}}/{{.Number}}/threads/{{pathEscape .T.ID}}/resolve" hx-vals='{"resolved": "1"}' hx-target="closest .thread" hx-swap="outerHTML">Resolve</button>
+{{end}}{{if and (not .T.CanReply) .Reply.Text}}<button class="btn-sm btn-quiet" type="button" hx-post="/pr/{{.Repo}}/{{.Number}}/threads/{{pathEscape .T.ID}}/replies" hx-vals='{"text": ""}' hx-target="closest .thread" hx-swap="outerHTML">Discard reply</button>
+{{end}}</div>
+</div>{{end}}
+{{define "thread-saved"}}{{template "thread" .Thread}}{{template "submit-count" .Details}}{{template "pending-error" .}}{{end}}
+{{define "check"}}<input type="checkbox" class="point-check" id="chk-{{.ID}}" aria-label="Mark point {{.No}} as checked"{{if .Checked}} checked{{end}} hx-post="/pr/{{.Report.Repo}}/{{.Report.Number}}/points/{{.ID}}/checked" hx-vals='{"checked": "{{if .Checked}}0{{else}}1{{end}}"}' hx-swap="outerHTML">{{end}}
+{{define "progress"}}<span class="progress" id="progress" hx-swap-oob="true">{{.CheckedN}} of {{len .Items}} checked</span>{{end}}
+{{define "submit-count"}}<button id="submit-count" hx-swap-oob="true">Submit review ({{.InReview}})</button>{{end}}
+{{/* review-mark: 💬 on a point whose draft is in the review or posted; always rendered so the include response's oob swap has a target. */}}
+{{define "review-mark"}}<span class="review-mark" data-review-mark="{{.ID}}">{{template "review-mark-icon" .}}</span>{{end}}
+{{define "review-mark-icon"}}{{if .Draft.PostedURL}}<span role="img" aria-label="Comment posted" title="Comment posted">💬</span>{{else if .Draft.InReview}}<span role="img" aria-label="Comment in review" title="Comment in review">💬</span>{{end}}{{end}}
+{{define "state"}}<span class="state {{stateClass .State}}" id="state-{{.ID}}" hx-swap-oob="true">{{.State}}</span>{{end}}
+{{define "editor-actions"}}<div class="editor-actions" id="ea-{{.ID}}">{{if .Draft.PostedURL}}<a class="posted" href="{{.Draft.PostedURL}}">Posted</a>{{else}}<button class="btn-sm{{if .Draft.InReview}} btn-quiet{{end}}" type="button" hx-post="/pr/{{.Report.Repo}}/{{.Report.Number}}/drafts/{{.ID}}/include" hx-vals='{"include": "{{if .Draft.InReview}}0{{else}}1{{end}}"}'{{if comment .ID}} hx-include="closest .editor"{{end}} hx-target="#ea-{{.ID}}" hx-swap="outerHTML">{{if .Draft.InReview}}Remove from review{{else}}Add to review{{end}}</button>
+{{if .Draft.OutdatedFrom}}<button class="btn-sm btn-quiet" type="button" hx-put="/pr/{{.Report.Repo}}/{{.Report.Number}}/drafts/{{.ID}}" hx-vals='{"text": ""}' hx-include="closest .editor" hx-target="#es-{{.ID}}" hx-swap="outerHTML">Discard</button>
+{{end}}<span class="editor-status" id="es-{{.ID}}"></span>{{end}}</div>{{end}}
+{{define "update"}}<div class="alert alert-info"><span>{{.Text}}</span>{{if .Reload}} <form method="post" action="/pr/{{.PR.Repo}}/{{.PR.Number}}/reload" hx-post="/pr/{{.PR.Repo}}/{{.PR.Number}}/reload" hx-swap="none" class="page-action"><input type="hidden" name="view" value="{{.View}}"><button id="reload-review" class="btn-sm">Reload review</button></form>{{end}}</div>{{end}}
+{{define "stale"}}{{with .ID}}<span class="editor-status" id="es-{{.}}" hx-swap-oob="true">Not saved</span>{{end}}{{template "pending-error" .}}{{end}}
+{{define "pending-error"}}<div id="pending-error" role="alert" hx-swap-oob="true">{{with .Error}}<p class="alert alert-error"><span>{{.}}</span></p>{{end}}</div>{{end}}
+{{define "checked"}}{{template "check" .Item}}{{template "progress" .Details}}{{template "pending-error" .}}{{end}}
+{{define "saved"}}{{if .Deleted}}<div class="inline"><div class="inline-body"><p class="muted">Your comment on {{.Item.File}}:{{.Item.Line}} was deleted.</p></div></div>{{template "submit-count" .Details}}{{else}}<span class="editor-status" id="es-{{.Item.ID}}">{{if .Error}}Not saved{{else}}Saved{{end}}</span>{{template "state" .Item}}{{end}}{{template "pending-error" .}}{{end}}
+{{define "included"}}{{template "editor-actions" .Item}}{{template "state" .Item}}{{if not (comment .Item.ID)}}<span class="review-mark" data-review-mark="{{.Item.ID}}" hx-swap-oob="outerHTML:[data-review-mark='{{.Item.ID}}']">{{template "review-mark-icon" .Item}}</span>{{end}}{{template "submit-count" .Details}}{{template "pending-error" .}}{{end}}
+{{define "dialog"}}{{$blocked := and (ne .Event "APPROVE") (not .Comments)}}<dialog class="dialog-backdrop" open aria-labelledby="submit-title">
+<div class="dialog">
+<h2 id="submit-title">Submit review</h2>
+{{with .Error}}<p class="alert alert-error" role="alert"><span>{{.}}</span></p>
+{{end}}<form id="review-form" hx-post="/pr/{{.PR.Repo}}/{{.PR.Number}}/review" hx-target="#dialog-slot" hx-disabled-elt="#review-submit, #review-form fieldset" hx-indicator="#review-submit" hx-disinherit="hx-disabled-elt hx-indicator">
+<input type="hidden" name="rev" value="{{.Rev}}"><input type="hidden" name="head" value="{{.Head}}"><input type="hidden" name="expect" value="{{.Expect}}">
+{{$get := printf "/pr/%s/%d/review/summary" .PR.Repo .PR.Number}}<fieldset class="choice-list" hx-include="closest form" hx-target="#dialog-slot"><legend class="visually-hidden">Decision</legend>
+{{if not .OwnPR}}<label class="choice"><input type="radio" name="event" value="APPROVE" hx-get="{{$get}}"{{if eq .Event "APPROVE"}} checked autofocus{{end}}><span>Approve</span><span class="hint">Approve the pull request and post your comments.</span></label>
+<label class="choice"><input type="radio" name="event" value="REQUEST_CHANGES" hx-get="{{$get}}"{{if eq .Event "REQUEST_CHANGES"}} checked autofocus{{end}}><span>Request changes</span><span class="hint">Needs at least one comment or a summary.</span></label>
+{{end}}<label class="choice"><input type="radio" name="event" value="COMMENT" hx-get="{{$get}}"{{if eq .Event "COMMENT"}} checked autofocus{{end}}><span>Comment</span><span class="hint">Post comments without a decision.</span></label>
+</fieldset>
+<div class="editor">
+<label class="label" for="summary">Summary (optional)</label>
+<textarea id="summary" name="body" rows="3"{{if $blocked}} required{{end}}>
+{{.Body}}</textarea>
+</div>
+<div class="dialog-comments">
+<span class="label">Comments to post ({{len .Comments}})</span>
+{{with .Comments}}<ul class="post-list">
+{{range .}}<li><details><summary><span class="mono" title="{{.At}}">{{.At}}</span><span class="snip">{{.Snip}}</span></summary><div class="text">{{.Text}}</div></details>{{if .Discard}}<span class="discard">thread no longer available, will be discarded</span>{{end}}</li>
+{{end}}</ul>
+{{else}}<p class="muted">No comments in this review.</p>
+{{end}}</div>
+{{if .Unchecked}}<p class="alert alert-warning"><span>{{.Unchecked}} of {{.Points}} points are not checked yet. You can still submit.</span></p>
+{{end}}{{if $blocked}}<p class="alert alert-error"><span>Add a comment or a summary to {{if eq .Event "REQUEST_CHANGES"}}request changes{{else}}comment{{end}}.</span></p>
+{{end}}{{with .OutdatedSHA}}<p class="alert alert-warning"><span>These results are outdated: the comments and the decision go to the reviewed commit <code class="sha">{{short .}}</code>, not the current head.</span></p>
+{{end}}{{if eq .Event "APPROVE"}}{{with .Confirm}}<div class="confirm-lines">
+<p>Approving needs confirmation:</p>
+<ul class="reasons">
+{{range .}}<li class="text">{{.}}</li>
+{{end}}</ul>
+<label class="confirm"><input type="checkbox" name="confirm" value="1" required> Approve anyway</label>
+</div>
+{{end}}{{end}}</form>
+<div class="dialog-actions">
+<form method="dialog"><button class="btn-quiet">Back to review</button></form>
+<button form="review-form" id="review-submit">{{.Label}}</button>
+</div>
+</div>
+</dialog>{{end}}
+{{define "diff"}}{{with .Diff.Alert}}<p class="alert alert-warning"><span>{{.}}</span></p>
+{{else}}{{if .Diff.Truncated}}<p class="alert alert-info"><span>Only the first 300 files are shown. Open on GitHub for the rest.</span></p>
+{{end}}<div class="diff-layout">
+<aside class="file-list">
+<label class="confirm"><input type="checkbox" id="files-with-points"> Files with points only</label>
+{{range .Diff.Files}}<a href="#file-{{.Index}}" title="{{.Filename}}"><span class="fname">{{base .Filename}}</span>{{if .Points}}<span class="pill pill-quiet">{{.Points}}</span>{{end}}</a>
+{{end}}{{with .Diff.Other}}<a href="#file-other" title="Files not in the diff"><span class="fname">Other files</span><span class="pill pill-quiet">{{$.Diff.OtherN}}</span></a>
+{{end}}{{with .Diff.Points}}<span class="label">Points</span>
+{{range .}}<a href="#d-{{.ID}}"><span class="point-no">{{.No}}</span> <span class="point-title">{{.Title}}</span>{{template "review-mark" .}}</a>
+{{end}}{{end}}</aside>
+<div class="diff-files">
+{{range $f := .Diff.Files}}<section class="diff-file" id="file-{{.Index}}">
+<div class="diff-file-head"><span class="path">{{with .PreviousFilename}}{{.}} → {{end}}{{.Filename}}</span><span class="stat-add">+{{.Additions}}</span><span class="stat-del">−{{.Deletions}}</span><span class="muted file-status">{{.Status}}</span></div>
+{{if or .Outside .Threads}}<div class="file-threads">
+{{with .Outside}}<span class="label">Not on a diff line</span>
+{{range .}}{{template "diff-point" .}}{{end}}{{end}}{{range .Threads}}<div class="inline"><div class="inline-head"><span class="badge plain">{{if .T.Outdated}}Outdated{{else if .T.Line}}Line {{.T.Line}}{{else}}File{{end}}</span><span class="thread-mark">Conversation</span></div>
+<div class="inline-body">{{template "thread-entry" .}}</div></div>
+{{end}}</div>
+{{end}}{{with .Note}}<p class="diff-note muted">{{.}}</p>
+{{else}}<div class="code"><div class="code-lines">
+{{range .Rows}}{{if .From}}<div class="dl-gap"><button class="link-btn" type="button" hx-get="/pr/{{$.PR.Repo}}/{{$.PR.Number}}/diff/expand?path={{$f.PathQ}}&from={{.From}}&to={{.To}}" hx-target="closest .dl-gap" hx-swap="outerHTML">↕ Expand</button></div>
+{{else if .Unchanged}}{{template "unchanged" .}}{{else}}<div class="dl{{if ne .Line.Kind "context"}} {{.Line.Kind}}{{end}}"><span class="dl-num">{{with .Line.Old}}{{.}}{{end}}</span>{{if and .Line.New (ne $f.Status "removed")}}{{with .Comments}}<a class="dl-num" href="#d-{{(index . 0).ID}}" title="Your comment on line {{(index . 0).Line}}">{{(index . 0).Line}}</a>{{else}}<a class="dl-num" href="#" title="Comment on line {{.Line.New}}" hx-get="/pr/{{$.PR.Repo}}/{{$.PR.Number}}/diff/comment-form?path={{$f.PathQ}}&line={{.Line.New}}" hx-trigger="click once" hx-target="{{if .Threads}}#rc-{{.Key}}{{else}}closest .dl{{end}}" hx-swap="afterend">{{.Line.New}}</a>{{end}}{{else}}<span class="dl-num"></span>{{end}}{{template "dl-mark" .}}<span class="dl-sign">{{if eq .Line.Kind "add"}}+{{else if eq .Line.Kind "del"}}-{{end}}</span><span class="dl-code">{{.Line.Text}}</span></div>
+{{if .Threads}}{{template "row-resolved" .}}{{end}}{{range .Items}}{{template "diff-point" .}}{{end}}{{range .Comments}}{{template "line-comment" .}}{{end}}{{if .Threads}}{{template "row-open" .}}{{end}}{{end}}{{end}}</div></div>
+{{end}}</section>
+{{end}}{{with .Diff.Other}}<section class="diff-file" id="file-other">
+<div class="diff-file-head"><span class="path">Other files</span></div>
+<div class="file-threads">
+{{range .}}<code>{{.Path}}</code>
+{{range .Outside}}{{template "diff-point" .}}{{end}}{{with .Rows}}<div class="code"><div class="code-lines">
+{{range .}}{{template "unchanged" .}}{{end}}</div></div>
+{{end}}{{end}}</div>
+</section>
+{{end}}</div>
+</div>
+{{end}}{{end}}
+{{/* A point's block in the diff view: on its line, at the head of its file or in Other files; open and focused when
+it is the ?point= one (only that one has Excerpt set on the diff page). */}}
+{{define "diff-point"}}<div class="inline point{{if .Excerpt}} focus{{end}}" id="d-{{.ID}}">{{template "check" .}}<details{{if .Excerpt}} open{{end}} hx-get="/pr/{{.Report.Repo}}/{{.Report.Number}}/points/{{.ID}}?view=diff" hx-trigger="toggle once" hx-target="find .point-body" hx-swap="outerHTML">{{template "point-summary" .}}
+{{template "point-body" .}}</details></div>
+{{end}}
+{{/* A diff row's thread slots: the resolved ones behind the line's icon, right after the line (a comment form goes
+after it, so the icon stays on its line), and the open ones after the points; both re-render on resolve. */}}
+{{define "row-resolved"}}{{if .ResolvedComments}}<details class="resolved-conv" id="rc-{{.Key}}" hx-vals="{{.Vals}}"{{if .Swap}} hx-swap-oob="true"{{end}}><summary aria-label="Resolved conversation ({{.ResolvedComments}} comments)" title="Resolved conversation"><span class="resolved-btn" aria-hidden="true">✓</span></summary>
+{{range .Threads}}{{if .T.Resolved}}<div class="inline"><div class="inline-head"><span class="thread-mark">Resolved conversation</span></div><div class="inline-body">{{template "thread" .}}</div></div>
+{{end}}{{end}}</details>
+{{else}}<div id="rc-{{.Key}}" hidden{{if .Swap}} hx-swap-oob="true"{{end}}></div>
+{{end}}{{end}}
+{{define "row-open"}}<div class="row-threads" id="rt-{{.Key}}" hx-vals="{{.Vals}}"{{if .Swap}} hx-swap-oob="true"{{end}}>{{range .Threads}}{{if not .T.Resolved}}<div class="inline"><div class="inline-head"><span class="thread-mark">Conversation</span></div><div class="inline-body">{{template "thread" .}}</div></div>
+{{end}}{{end}}</div>
+{{end}}
+{{define "row-threads"}}{{template "row-resolved" .}}{{template "row-open" .}}{{end}}
+{{/* An unchanged line around a point outside the diff: no comment link (GitHub cannot comment there), its points
+under it; the first line of a range carries the label. */}}
+{{define "unchanged"}}{{if .Label}}<div class="dl-label">Not changed in this PR</div>
+{{end}}<div class="dl unchanged"><span class="dl-num">{{.Line.Old}}</span><span class="dl-num">{{.Line.New}}</span>{{template "dl-mark" .}}<span class="dl-sign"></span><span class="dl-code">{{.Line.Text}}</span></div>
+{{range .Items}}{{template "diff-point" .}}{{end}}{{end}}
+{{define "dl-mark"}}<span class="dl-mark">{{range .Items}}<a class="mark" href="#d-{{.ID}}" title="Point {{.No}}: {{.Title}}">{{.No}}{{template "review-mark" .}}</a>{{end}}{{with .Mine}}<a class="mark mine" href="#d-{{.}}" title="Your comment">C</a>{{end}}</span>{{end}}
+{{define "expanded"}}{{range .}}<div class="dl"><span class="dl-num">{{.Old}}</span><span class="dl-num">{{.New}}</span><span class="dl-mark"></span><span class="dl-sign"></span><span class="dl-code">{{.Text}}</span></div>
+{{end}}{{end}}
+{{define "expand-error"}}<div class="dl-gap">Could not expand: {{.}}</div>
+{{end}}

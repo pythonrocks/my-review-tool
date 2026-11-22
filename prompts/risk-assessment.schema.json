@@ -1,0 +1,38 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sensitive_areas", "points_of_interest"],
+  "properties": {
+    "sensitive_areas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["area", "file", "line", "reason", "title", "suggested_comment"],
+        "properties": {
+          "area": {"type": "string", "description": "Exactly one of the sensitive areas listed in the input."},
+          "file": {"type": "string", "description": "Path relative to the checkout root."},
+          "line": {"type": "integer", "description": "Line number, or 0 for the whole file."},
+          "reason": {"type": "string"},
+          "title": {"type": "string", "description": "Short one-line title naming the place, at most 80 characters."},
+          "suggested_comment": {"type": "string", "description": "Comment or question to the PR author about this place."}
+        }
+      }
+    },
+    "points_of_interest": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file", "line", "reason", "title", "suggested_comment"],
+        "properties": {
+          "file": {"type": "string", "description": "Path relative to the checkout root."},
+          "line": {"type": "integer", "description": "Line number, or 0 for the whole file."},
+          "reason": {"type": "string"},
+          "title": {"type": "string", "description": "Short one-line title naming the place, at most 80 characters."},
+          "suggested_comment": {"type": "string", "description": "Comment or question to the PR author about this place."}
+        }
+      }
+    }
+  }
+}

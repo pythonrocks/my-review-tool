@@ -1,0 +1,11 @@
+{
+  "repositories": [],
+  "concurrency": 2,
+  "quiet_period": "5m",
+  "auto_review_max_age": "168h",
+  "steps": {
+    "code_review": {"agent": "claude", "prompt_file": ""},
+    "security_review": {"agent": "claude", "prompt_file": ""},
+    "risk_assessment": {"agent": "claude", "prompt_file": ""}
+  }
+}

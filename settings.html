@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{if .First}}Welcome{{else}}Settings{{end}} — myReview</title>
+<link rel="stylesheet" href="/myreview.css">
+<meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"422","swap":true},{"code":"[45]..","swap":false,"error":true}]}'>
+<script src="/static/htmx.min.js" defer></script>
+<script src="/static/settings.js" defer></script>
+<script src="/static/links.js" defer></script>
+<script type="module" src="/wails/runtime.js"></script>
+</head>
+<body>
+<div class="page settings">
+{{if not .First}}<a class="back-link" href="/">Back to the dashboard</a>
+{{end}}<header class="app-header"><h1>{{if .First}}Welcome to myReview{{else}}Settings{{end}}</h1></header>
+<section class="panel" aria-labelledby="how-h">
+<h2 id="how-h">How it works</h2>
+<p>myReview uses your <code>gh</code> login to list pull requests, read diffs and post reviews as you. It runs <code>claude</code> or <code>codex</code> on this Mac, read-only or sandboxed, on a checkout of the pull request. myReview itself sends nothing anywhere else, and its data stays in <code>~/Library/Application Support/myReview</code>.</p>
+</section>
+<section class="panel" aria-labelledby="conn-h">
+<h2 id="conn-h">Connections</h2>
+<noscript><p class="muted">Checking the connections needs JavaScript.</p></noscript>
+<ul class="cli-list">
+<li><span class="cli-name">GitHub CLI</span><span class="cli-status" id="status-gh" role="status" hx-get="/settings/status/gh" hx-trigger="load" hx-target="this">Checking…</span><button type="button" class="btn-sm btn-quiet" hx-get="/settings/status/gh" hx-target="#status-gh" hx-disabled-elt="this">Re-check</button></li>
+<li><span class="cli-name">Claude Code</span><span class="cli-status" id="status-claude" role="status" hx-get="/settings/status/claude" hx-trigger="load" hx-target="this">Checking…</span><button type="button" class="btn-sm btn-quiet" hx-get="/settings/status/claude" hx-target="#status-claude" hx-disabled-elt="this">Re-check</button></li>
+<li><span class="cli-name">Codex</span><span class="cli-status" id="status-codex" role="status" hx-get="/settings/status/codex{{if .First}}?first=1{{end}}" hx-trigger="load" hx-target="this">Checking…</span><button type="button" class="btn-sm btn-quiet" hx-get="/settings/status/codex" hx-target="#status-codex" hx-disabled-elt="this">Re-check</button></li>
+</ul>
+</section>
+{{template "form" .}}
+</div>
+</body>
+</html>
+{{define "form"}}<form id="settings-form" method="post" action="/settings" hx-post="/settings" hx-target="this" hx-swap="outerHTML" hx-disabled-elt="#save">
+{{with .Error}}<p class="alert alert-error" role="alert"><span>{{.}}</span></p>
+{{end}}{{if .First}}<input type="hidden" name="first" value="1">
+{{end}}<input type="hidden" name="tab" value="{{.Tab}}">
+{{template "agent" .}}
+<section class="panel" aria-labelledby="repos-h">
+<h2 id="repos-h" tabindex="-1">Repositories</h2>
+<ul class="chips" id="repo-chips">{{range .Repos}}{{template "chip" .}}{{end}}</ul>
+<noscript><p class="muted">Adding and removing a repository needs JavaScript.</p></noscript>
+<div id="repo-add" class="repo-add" hx-disabled-elt="unset">
+<label class="label" for="repo-q">Add a repository</label>
+<div class="repo-add-row"><input type="search" id="repo-q" name="q" placeholder="owner/name" autocomplete="off" spellcheck="false" aria-describedby="repo-error" hx-get="/settings/repos" hx-trigger="input changed delay:300ms" hx-target="#repo-suggest" hx-swap="innerHTML">
+<button type="button" id="repo-add-btn" class="btn-sm" {{template "repo-post"}}>Add</button></div>
+<p id="repo-error" class="repo-error" role="alert"></p>
+<div id="repo-suggest" class="repo-suggest"></div>
+</div>
+</section>
+<section class="panel" aria-labelledby="prompts-h">
+<h2 id="prompts-h">Prompts</h2>
+<p class="muted">A repository's <code>.myreview.json</code> can still override these for that repository.</p>
+<div class="prompt-tabs" role="tablist" aria-labelledby="prompts-h" hidden>{{range .Steps}}<button type="button" role="tab" id="tab-{{.Key}}" aria-controls="panel-{{.Key}}" aria-selected="{{if eq .Key $.Tab}}true{{else}}false{{end}}"{{if ne .Key $.Tab}} tabindex="-1"{{end}}>{{.Label}}</button>{{end}}</div>
+{{range .Steps}}<div class="prompt-panel" role="tabpanel" id="panel-{{.Key}}" aria-labelledby="tab-{{.Key}}">
+<div class="panel-head"><label class="label" for="prompt-{{.Key}}">{{.Label}}</label><button type="button" class="btn-sm btn-quiet" hx-get="/settings/prompt-default?step={{.Key}}" hx-target="#prompt-{{.Key}}" hx-swap="outerHTML">Reset to default</button></div>
+{{template "prompt" .}}
+</div>
+{{end}}</section>
+<p class="muted">Concurrency, quiet period, maximum age and skip rules are read at startup; changes to them in the config file need a restart.</p>
+<div class="settings-actions"><button id="save">{{if .First}}Save and start{{else}}Save{{end}}</button></div>
+</form>
+{{end}}{{define "agent"}}<section class="panel" id="agent" aria-labelledby="agent-h"{{if .OOB}} hx-swap-oob="true"{{end}}>
+<h2 id="agent-h">Agent</h2>
+{{if .Mixed}}<p class="alert alert-info"><span>The steps use different agents: {{range $i, $s := .Steps}}{{if $i}}, {{end}}{{$s.Label}} uses {{$s.Agent}}{{end}}. Choose one to use it for every step, or choose none to keep them.</span></p>
+{{end}}<fieldset class="choice-list"><legend class="visually-hidden">Agent for every step</legend>
+<label class="choice"><input type="radio" name="agent" value="claude"{{if eq .Agent "claude"}} checked{{end}}><span>Claude Code</span></label>
+<label class="choice"><input type="radio" name="agent" value="codex"{{if eq .Agent "codex"}} checked{{end}}><span>Codex</span></label>
+</fieldset>
+</section>
+{{end}}{{define "repo-post"}}hx-post="/settings/repo" hx-params="q,repo" hx-target="#repo-chips" hx-swap="beforeend" hx-disabled-elt="this, #save"{{end}}
+{{define "repo-added"}}{{template "chip" .}}<p id="repo-error" class="repo-error" role="alert" hx-swap-oob="true"></p>{{end}}
+{{define "text"}}{{.}}{{end}}
+{{define "repo-suggest"}}{{if .Err}}<p class="muted" role="status">Could not load your repositories: {{if .NotLoggedIn}}GitHub CLI is not logged in. Run <code>gh auth login</code> in Terminal, then Retry.{{else}}{{.Err}}{{end}} <button type="button" class="link-btn" hx-get="/settings/repos?retry=1" hx-include="#repo-q" hx-target="#repo-suggest" hx-swap="innerHTML">Retry</button></p>
+{{else if .Loading}}<p class="muted" role="status" hx-get="/settings/repos" hx-trigger="load delay:1s" hx-include="#repo-q" hx-target="#repo-suggest" hx-swap="innerHTML">Loading your repositories…</p>
+{{else}}{{if .Matches}}<ul class="suggestions" aria-label="Your repositories matching {{.Q}}">{{range .Matches}}<li><button type="button" class="link-btn" hx-vals='{"q":"{{.}}"}' {{template "repo-post"}}>{{.}}</button></li>{{end}}</ul>
+{{else}}<p class="muted" role="status">None of your repositories match. Type owner/name and choose Add.</p>
+{{end}}{{if .Capped}}<p class="muted">Showing the first 1,000; type owner/name to add others.</p>
+{{end}}{{end}}{{end}}
+{{define "chip"}}<li class="chip"><input type="hidden" name="repo" value="{{.}}"><span>{{.}}</span><button type="button" class="chip-remove btn-sm btn-quiet" aria-label="Remove {{.}}">×</button></li>{{end}}
+{{define "prompt"}}<textarea id="prompt-{{.Key}}" name="prompt_{{.Key}}" rows="16" spellcheck="false">
+{{.Prompt}}</textarea>{{end}}
+{{define "cli-status"}}{{if eq .State "logged in"}}<span class="badge status-done">logged in</span> {{.Version}}{{with .Account}} as <strong>{{.}}</strong>{{end}}{{else if eq .State "not logged in"}}<span class="badge status-failed">not logged in</span> {{.Version}}. Run <code>{{.Login}}</code> in Terminal.{{else if eq .State "not found"}}<span class="badge status-failed">not found</span> Install it, then run <code>{{.Login}}</code> in Terminal.{{else if eq .State "timed out"}}<span class="badge status-not-queued">check timed out</span>{{else}}<span class="badge status-not-queued">{{.State}}</span>{{end}}{{with .OOBAgent}}{{template "agent" .}}{{end}}{{end}}

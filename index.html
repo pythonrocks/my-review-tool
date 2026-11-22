@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<noscript><meta http-equiv="refresh" content="60"></noscript>
+<title>myReview</title>
+<link rel="stylesheet" href="/myreview.css">
+<meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"historyCacheSize":0,"refreshOnHistoryMiss":true}'>
+<script src="/static/htmx.min.js" defer></script>
+<script src="/static/dashboard.js" defer></script>
+<script src="/static/links.js" defer></script>
+<script type="module" src="/wails/runtime.js"></script>
+</head>
+<body>
+<header class="app-header">
+<h1>myReview</h1>
+{{with .Poll.Login}}<p class="signed-in">Signed in to GitHub as <strong>{{.}}</strong></p>
+{{end}}<a class="settings-link" href="/settings">Settings</a>
+</header>
+<div id="poll-status">{{template "status" .}}</div>
+<main id="pr-list">
+<div class="toolbar">
+<form class="filters" method="get" action="/" hx-get="/" hx-trigger="change, submit" hx-target="#pr-rows" hx-sync="#pr-list:replace">
+<label><span class="visually-hidden">Org</span><select name="org"><option value="">All orgs</option>{{range .Orgs}}<option value="{{.}}"{{if eq . $.Filter.Org}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+<label><span class="visually-hidden">Repository</span><select name="repo"><option value="">All repos</option>{{range .Repos}}<option value="{{.}}"{{if eq . $.Filter.Repo}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+<label><span class="visually-hidden">Author</span><select name="author"><option value="">All authors</option>{{range .Authors}}<option value="{{.}}"{{if eq . $.Filter.Author}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+<fieldset class="seg"><legend class="visually-hidden">Risk</legend><input class="visually-hidden" type="checkbox" id="f-risk-low" name="risk" value="Low"{{if has .Filter.Risk "Low"}} checked{{end}}><label for="f-risk-low"><span class="meter risk-low"></span>Low</label><input class="visually-hidden" type="checkbox" id="f-risk-medium" name="risk" value="Medium"{{if has .Filter.Risk "Medium"}} checked{{end}}><label for="f-risk-medium"><span class="meter risk-medium"></span>Medium</label><input class="visually-hidden" type="checkbox" id="f-risk-high" name="risk" value="High"{{if has .Filter.Risk "High"}} checked{{end}}><label for="f-risk-high"><span class="meter risk-high"></span>High</label></fieldset>
+<fieldset class="seg"><legend class="visually-hidden">Recommendation</legend><input class="visually-hidden" type="checkbox" id="f-rec-human" name="rec" value="human"{{if has .Filter.Rec "human"}} checked{{end}}><label for="f-rec-human" title="Human review required"><span class="rec rec-human"></span><span class="visually-hidden">Human review required</span></label><input class="visually-hidden" type="checkbox" id="f-rec-auto" name="rec" value="automated"{{if has .Filter.Rec "automated"}} checked{{end}}><label for="f-rec-auto" title="Automated review is sufficient"><span class="rec rec-auto"></span><span class="visually-hidden">Automated review is sufficient</span></label></fieldset>
+<input class="visually-hidden" type="checkbox" id="f-mine" name="mine" value="1"{{if .Filter.Mine}} checked{{end}}><label class="toggle" for="f-mine" title="Only PRs requesting my review">Requested <span aria-hidden="true">⭐</span></label>
+<input class="visually-hidden" type="checkbox" id="f-hideskipped" name="hideskipped" value="1"{{if .Filter.HideSkipped}} checked{{end}}><label class="toggle" for="f-hideskipped">Hide skipped</label>
+<input class="visually-hidden" type="checkbox" id="f-hideapproved" name="hideapproved" value="1"{{if .Filter.HideApproved}} checked{{end}}><label class="toggle" for="f-hideapproved" title="Hide approved by me">Hide approved</label>
+<button class="btn-sm apply">Apply</button>
+</form>
+</div>
+<div id="pr-rows">{{template "list" .}}</div>
+</main>
+</body>
+</html>
+{{define "list"}}{{if .Query}}<p class="filter-summary"><span>Showing {{len .Rows}} of {{len .Poll.PRs}} pull requests, {{.Hidden}} hidden by filters.</span>{{range .Chips}} <a class="filter-link" id="{{.ID}}" href="{{.Href}}" aria-label="Remove filter {{.Label}}">{{.Label}} <span aria-hidden="true">×</span></a>{{end}} <a class="filter-link" id="clear-filters" href="/">Clear filters</a></p>
+{{end}}{{if not .Poll.FirstPollDone}}<p class="alert alert-info"><span>Loading pull requests…</span></p>
+{{else if not .Poll.PRs}}<p class="muted">No open pull requests.</p>
+{{else if not .Rows}}<p class="muted">{{if eq .Query "mine=1"}}No open pull requests request your review.{{else}}No open pull requests match the filters.{{end}}</p>
+{{else}}<div class="table-scroll">
+<table class="pr-table">
+<thead><tr><th title="Review requested"><span aria-hidden="true">⭐</span><span class="visually-hidden">Review requested</span></th><th>Repository</th><th>Pull request</th><th>Author</th><th>Age</th><th>Draft</th><th>Approved</th><th>Review</th><th>Risk</th><th>Recommendation</th><th></th></tr></thead>
+<tbody>
+{{range .Rows}}{{template "row" (row . $)}}
+{{end}}</tbody>
+</table>
+</div>
+{{end}}{{template "poll" .}}
+{{end}}
+{{define "poll"}}<span id="pr-poll"{{if .OOB}} hx-swap-oob="true"{{end}} hidden hx-get="/?{{.Query}}" hx-trigger="every {{.PollEvery}}s, myreview:refresh" hx-target="#pr-rows" hx-swap="innerHTML" hx-sync="#pr-list:drop"></span>{{end}}{{define "status"}}{{with .Poll.Global}}<p class="alert alert-error"><span>{{.}}</span></p>
+{{end}}<section class="watched">
+<h2>Watched repositories</h2>
+{{if .Repositories}}<ul class="repos">
+{{range .Repositories}}<li><a id="repo-{{.}}" href="https://github.com/{{.}}">{{.}}</a>{{with index $.Poll.Errors .}} <span class="repo-error">— error: {{.}}</span>{{end}}</li>
+{{end}}</ul>{{else}}<p><a href="/settings">Add repositories in Settings</a></p>{{end}}
+</section>
+{{end}}{{define "oob"}}<div id="poll-status" hx-swap-oob="true">{{template "status" .}}</div>
+{{end}}{{define "row"}}{{with .PR}}<tr><td>{{if .Requested}}<span class="ind" role="img" aria-label="Your review is requested" title="Your review is requested">⭐</span>{{end}}</td><td class="repo">{{with repoParts .Repo}}<span class="org">{{index . 0}}</span><br>{{index . 1}}{{end}}</td><td class="pr"><a id="pr-{{.Repo}}-{{.Number}}" href="{{.URL}}"><span class="num">#{{.Number}}</span>{{.Title}}</a></td><td>{{.Author}}</td><td class="age">{{age .Created}}</td><td>{{if .Draft}}<span class="badge plain">draft</span>{{end}}</td><td>{{range (approvals . $.Login).Inds}}<span class="ind{{if .Outdated}} outdated{{end}}" role="img" aria-label="{{.Label}}" title="{{.Label}}">{{.Symbol}}</span>{{end}}</td>{{$r := $.St}}{{$done := eq $r.Status "done"}}<td>{{if $done}}{{with reviewDots $r}}<span class="ind" role="img" aria-label="{{.Label}}" title="{{.Label}}">{{if $r.Outdated}}<span class="badge plain">outdated</span>{{end}}{{range .Dots}}<span class="dot {{.Class}}">{{.N}}</span>{{end}}</span>{{end}}{{else if or (eq $r.Status "skipped") (eq $r.Status "on demand")}}<span class="badge {{statusClass $r}}" title="{{status $r}}">{{$r.Status}}</span>{{else}}<span class="badge {{statusClass $r}}">{{or (status $r) "not queued"}}</span>{{end}}</td><td>{{if and $done $r.Risk}}<span class="ind" role="img" aria-label="Risk: {{$r.Risk}}" title="Risk: {{$r.Risk}}"><span class="meter risk-{{lower $r.Risk}}"></span></span>{{end}}</td><td>{{if and $done $r.Recommendation}}{{$l := recLabel $r.Recommendation}}<span class="ind" role="img" aria-label="{{$l}}" title="{{$l}}"><span class="rec {{recClass $r.Recommendation}}"></span></span>{{end}}</td><td class="actions"><a class="btn btn-sm btn-quiet" id="details-{{.Repo}}-{{.Number}}" href="/pr/{{.Repo}}/{{.Number}}">Details</a> {{if ne $r.Status "skipped"}}<form method="post" action="/rerun" hx-post="/rerun" hx-target="closest tr" hx-swap="outerHTML" hx-sync="#pr-list:queue all"><input type="hidden" name="repo" value="{{.Repo}}"><input type="hidden" name="number" value="{{.Number}}"><input type="hidden" name="filter" value="{{$.Query}}"><button class="btn-sm btn-quiet" id="rerun-{{.Repo}}-{{.Number}}">{{if eq $r.Status "on demand"}}Review{{else}}Re-run{{end}}</button></form>{{end}}</td></tr>{{end}}{{end}}{{define "row-error"}}<tr class="row-error"><td colspan="11"><p class="alert alert-error" role="alert">{{.}}</p></td></tr>{{end}}
