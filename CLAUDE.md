@@ -20,7 +20,8 @@ make dmg        # package bin/myReview.app into bin/myReview.dmg
 ```
 
 `go test ./...` and `make lint` must pass before a pull request. CI
-(`.github/workflows/ci.yml`) only runs when started by hand.
+(`.github/workflows/ci.yml`) runs on pushes to `main` and on pull requests in
+the public repository; `.github/workflows/release.yml` makes releases there.
 
 ## Dependencies and third-party notices (required)
 
@@ -51,6 +52,10 @@ vendored asset (for example `static/htmx.min.js`) must update
 - The product name is myReview. The old name `ureview` appears only in the
   one-time migration of the old data directory (`migrateOldDir` in `main.go`
   and its tests). Do not remove those names.
+- Commit messages use conventional commits (`feat:`, `fix:`, `docs:`, `chore:` …)
+  because they feed the changelog. `CHANGELOG.md` and
+  `.release-please-manifest.json` are maintained by release-please; do not edit
+  them by hand.
 
 ## License
 

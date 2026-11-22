@@ -19,6 +19,12 @@ make dmg        # package bin/myReview.app into bin/myReview.dmg
 ## Pull requests
 
 - Keep each pull request to one change, and explain what it changes and why.
+- Use conventional commit messages (`feat: …`, `fix: …`, `docs: …`,
+  `chore: …`) for both the pull request title and your commit messages. The
+  squash merge commit feeds the changelog and the next release version, and
+  depending on the repository's squash setting it takes either the pull request
+  title or the commit message. The repository is set to "Default to pull request
+  title", but do not rely on that.
 - Add or update tests for the changed behavior.
 - `go test ./...` and `make lint` must pass.
 - Update the documentation when the change alters documented behavior.

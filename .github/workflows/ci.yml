@@ -1,10 +1,17 @@
 name: ci
 
-# Manual only: disabled until the repo is public or the budget allows macOS runners.
-on: workflow_dispatch
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   macos:
+    if: github.repository == 'pythonrocks/my-review-tool'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5

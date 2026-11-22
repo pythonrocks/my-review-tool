@@ -179,12 +179,15 @@ Prompt injection in a PR (its code, title or description) can still distort the 
 
 ## Release
 
-Releases are built locally and published in the public repository, [pythonrocks/my-review-tool](https://github.com/pythonrocks/my-review-tool): tags and release DMGs live there. Tag the release commit there, then:
+Releases are published in the public repository, [pythonrocks/my-review-tool](https://github.com/pythonrocks/my-review-tool), by `.github/workflows/release.yml` with [release-please](https://github.com/googleapis/release-please):
 
-```sh
-make app && make dmg
-gh release create vX.Y.Z bin/myReview.dmg --repo pythonrocks/my-review-tool --generate-notes
-```
+- conventional commits (`feat:`, `fix:`, …) on `main` feed a release pull request that bumps the version and updates `CHANGELOG.md`;
+- merging that pull request tags `vX.Y.Z` and creates the GitHub release;
+- the `dmg` job then builds the app from the tag, checks that its version equals the tag, and attaches `myReview.dmg` to the release.
+
+For a local build, `make app && make dmg` still writes `bin/myReview.dmg`.
+
+If the `dmg` job fails, use "Re-run failed jobs", not "Re-run all jobs": on a full re-run release-please sees that the release already exists, reports `release_created=false`, and the build is skipped. As a manual fallback, run `make app && make dmg` from a checkout of the tag, then `gh release upload vX.Y.Z bin/myReview.dmg --clobber --repo pythonrocks/my-review-tool`.
 
 The DMG is unsigned (ad hoc signature only), so users need the Gatekeeper override from [Install](../README.md#install).
 
@@ -198,4 +201,4 @@ make lint   # gofmt, go vet, and go vet for Linux (-tags purego, Wails without c
 go test -race ./...
 ```
 
-There is no automatic CI: `.github/workflows/ci.yml` (tests, lint, `make app`, `make dmg`, DMG as an artifact) runs only when started by hand.
+`.github/workflows/ci.yml` (tests, lint, `make app`, `make dmg`, DMG as an artifact) runs on pushes to `main`, on pull requests, and when started by hand.

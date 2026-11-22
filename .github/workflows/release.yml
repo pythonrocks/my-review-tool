@@ -1,0 +1,52 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release-please:
+    if: github.repository == 'pythonrocks/my-review-tool'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  dmg:
+    needs: release-please
+    if: github.repository == 'pythonrocks/my-review-tool' && needs.release-please.outputs.release_created == 'true'
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          fetch-depth: 0 # tags, for the app version
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+      - run: make app
+      - name: Check the app version matches the tag
+        run: |
+          got=$(plutil -extract CFBundleShortVersionString raw bin/myReview.app/Contents/Info.plist)
+          if [ "$got" != "${TAG#v}" ]; then
+            echo "app version $got does not match tag $TAG" >&2
+            exit 1
+          fi
+      - run: make dmg
+      - run: gh release upload "$TAG" bin/myReview.dmg --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
