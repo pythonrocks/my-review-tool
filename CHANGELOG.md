@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/pythonrocks/my-review-tool/compare/v1.0.0...v1.0.1) (2026-11-22)
+
+
+### Documentation
+
+* commits and releases section in CLAUDE.md ([9ffb54a](https://github.com/pythonrocks/my-review-tool/commit/9ffb54a33732656c0dbdd8282197af3a5538d465))
+
 ## 1.0.0 (2026-11-22)
 
 First public release of **myReview**: a personal pull request review dashboard for macOS. It runs AI code review, security review and risk assessment on the open PRs of the repositories you watch, using your own `claude` or `codex` CLI. You check the points it lists, edit the suggested comments and submit one GitHub review.
