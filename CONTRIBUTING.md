@@ -23,6 +23,8 @@ make dmg        # package bin/myReview.app into bin/myReview.dmg
 - `go test ./...` and `make lint` must pass.
 - Update the documentation when the change alters documented behavior.
 - Do not add dependencies without discussing them in an issue first.
+- A change to Go modules or vendored assets must update `THIRD_PARTY_NOTICES.md`
+  in the same pull request; see [CLAUDE.md](CLAUDE.md#dependencies-and-third-party-notices-required).
 - For a UI change, add a screenshot to the pull request description.
 
 ## Contributor License Agreement
