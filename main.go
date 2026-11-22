@@ -25,12 +25,8 @@ var exampleConfig []byte
 //go:embed trayicon.png
 var trayIcon []byte
 
-// migrationNote is the line resolvePaths leaves for the log when it moved the old data dir.
-var migrationNote string
-
 // resolvePaths returns the config and data paths: MYREVIEW_CONFIG and MYREVIEW_DATA_DIR when set
-// (relative to the working directory), otherwise under <user config dir>/myReview, created 0700. The old
-// uReview dir is moved first whenever a default path is used, so myReview is never created empty in front of it.
+// (relative to the working directory), otherwise under <user config dir>/myReview, created 0700.
 func resolvePaths() (configPath, dataDir string, err error) {
 	configPath, dataDir = os.Getenv("MYREVIEW_CONFIG"), os.Getenv("MYREVIEW_DATA_DIR")
 	if configPath == "" || dataDir == "" {
@@ -39,9 +35,6 @@ func resolvePaths() (configPath, dataDir string, err error) {
 			return "", "", err
 		}
 		dir := filepath.Join(base, "myReview")
-		if err := migrateOldDir(filepath.Join(base, "uReview"), dir); err != nil {
-			return "", "", err
-		}
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			return "", "", err
 		}
@@ -54,42 +47,6 @@ func resolvePaths() (configPath, dataDir string, err error) {
 	}
 	configPath, err = filepath.Abs(configPath) // the dashboard names the file to edit
 	return configPath, dataDir, err
-}
-
-// migrateOldDir moves the pre-rename uReview dir to dir, with its config, data dir and log, once:
-// only when dir does not exist yet. A failed rename is returned, so the app never starts empty over old data.
-func migrateOldDir(old, dir string) error {
-	if _, err := os.Lstat(dir); !errors.Is(err, fs.ErrNotExist) {
-		return err // dir exists (nil): nothing to do
-	}
-	if _, err := os.Lstat(old); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-	// Files first, the dir last: after a failed rename dir still does not exist, so the next start retries.
-	for _, r := range [][2]string{
-		{"ureview.json", "myreview.json"},
-		{"ureview-data", "myreview-data"},
-		{"myreview-data/ureview.log", "myreview-data/myreview.log"},
-	} {
-		from, to := filepath.Join(old, r[0]), filepath.Join(old, r[1])
-		if _, err := os.Lstat(from); errors.Is(err, fs.ErrNotExist) {
-			continue
-		}
-		if _, err := os.Lstat(to); err == nil {
-			continue
-		}
-		if err := os.Rename(from, to); err != nil {
-			return err
-		}
-	}
-	if err := os.Rename(old, dir); err != nil {
-		return err
-	}
-	migrationNote = fmt.Sprintf("moved %s to %s", old, dir)
-	return nil
 }
 
 // redirectLogs points stdout and stderr, panics included, at <dataDir>/myreview.log.
@@ -155,9 +112,6 @@ func main() {
 	cfg, configPath, dataDir, store, startURL, err := startup()
 	if err == nil {
 		err = redirectLogs(dataDir)
-	}
-	if migrationNote != "" { // stderr is the log once redirected; recorded even when startup failed after the move
-		fmt.Fprintln(os.Stderr, migrationNote)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

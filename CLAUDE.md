@@ -49,13 +49,19 @@ vendored asset (for example `static/htmx.min.js`) must update
   placeholder repositories such as `a/b` and `o/r`.
 - Never commit `myreview.json`, `myreview-data/`, `.env` or `bin/`. They are
   already in `.gitignore`.
-- The product name is myReview. The old name `ureview` appears only in the
-  one-time migration of the old data directory (`migrateOldDir` in `main.go`
-  and its tests). Do not remove those names.
-- Commit messages use conventional commits (`feat:`, `fix:`, `docs:`, `chore:` …)
-  because they feed the changelog. `CHANGELOG.md` and
-  `.release-please-manifest.json` are maintained by release-please; do not edit
-  them by hand.
+
+## Commits and releases
+
+- Commit messages and PR titles use conventional commits, because they feed
+  the changelog and the version (release-please).
+- `fix:` gives a patch release, `feat:` a minor release, and `feat!:` or a
+  `BREAKING CHANGE:` footer a major release. `docs:`, `chore:`, `ci:`, `test:`
+  and `refactor:` do not cause a release on their own.
+- The PR title becomes the squash merge commit.
+- release-please keeps a release PR open; merging it tags `vX.Y.Z`, creates the
+  GitHub release, and the workflow attaches `myReview.dmg`.
+- `CHANGELOG.md` and `.release-please-manifest.json` are maintained by
+  release-please; do not edit them by hand.
 
 ## License
 
