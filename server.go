@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"crypto/sha256"
@@ -2189,6 +2190,20 @@ func newHandler(ch *configHolder, p *poller, q *reviewQueue,
 			http.Error(w, "forbidden origin", http.StatusForbidden)
 			return
 		}
-		mux.ServeHTTP(w, r)
+		// Wails on macOS hands each Write to WebKit as its own chunk and many small chunks stall the web view,
+		// so the body goes out in one Write; a future streaming (SSE) endpoint would have to bypass this.
+		bw := &bufferedWriter{ResponseWriter: w}
+		mux.ServeHTTP(bw, r)
+		if bw.buf.Len() > 0 {
+			w.Write(bw.buf.Bytes())
+		}
 	})
 }
+
+// bufferedWriter collects the body; Header and WriteHeader go straight to the wrapped writer.
+type bufferedWriter struct {
+	http.ResponseWriter
+	buf bytes.Buffer
+}
+
+func (b *bufferedWriter) Write(p []byte) (int, error) { return b.buf.Write(p) }
