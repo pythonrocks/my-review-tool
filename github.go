@@ -27,13 +27,15 @@ type pullRequest struct {
 	Number                            int
 	Draft, Requested                  bool
 	Created                           time.Time
-	Approvals                         []approval // sorted by login, case-insensitive
+	Reviews                           []approval // one per user, sorted by login, case-insensitive
 }
 
-// approval is a user's standing approval of a pull request; Outdated means it approves an older commit than the head.
+// approval is a user's review status of a pull request: State is APPROVED, CHANGES_REQUESTED or COMMENTED,
+// and Outdated means the deciding review is of an older commit than the head.
 type approval struct {
 	Login    string
 	Outdated bool
+	State    string
 }
 
 // review is one submitted pull request review as gh reports it.
@@ -80,27 +82,37 @@ func parsePRs(repo string, data []byte) ([]pullRequest, error) {
 			reviews = append(reviews, review{Login: rv.Author.Login, State: rv.State, Commit: rv.Commit.Oid})
 		}
 		prs = append(prs, pullRequest{Repo: repo, Title: r.Title, URL: r.URL, Author: author, Labels: labels, Number: r.Number, Draft: r.IsDraft, Created: r.CreatedAt, HeadSHA: r.HeadRefOid,
-			Approvals: approvalsOf(reviews, r.HeadRefOid)})
+			Reviews: reviewsOf(reviews, r.HeadRefOid)})
 	}
 	return prs, nil
 }
 
-// approvalsOf returns the standing approvals in reviews (oldest first) of a PR at head, sorted by login.
-// Like approvedAt, each user's last review that is not COMMENTED or PENDING counts, and only APPROVED approves.
-func approvalsOf(reviews []review, head string) []approval {
-	last := map[string]review{}
+// reviewsOf returns each user's review status from reviews (oldest first) of a PR at head, sorted by login.
+// Like approvedAt, a user's last review that is not COMMENTED or PENDING decides (DISMISSED gives no entry);
+// a user without one gets their last COMMENTED review.
+func reviewsOf(reviews []review, head string) []approval {
+	decisive, commented := map[string]review{}, map[string]review{}
 	for _, r := range reviews {
 		if r.Login == "" {
 			r.Login = "ghost" // deleted user
 		}
-		if r.State != "COMMENTED" && r.State != "PENDING" {
-			last[strings.ToLower(r.Login)] = r
+		switch r.State {
+		case "PENDING":
+		case "COMMENTED":
+			commented[strings.ToLower(r.Login)] = r
+		default:
+			decisive[strings.ToLower(r.Login)] = r
+		}
+	}
+	for k, r := range commented {
+		if _, ok := decisive[k]; !ok {
+			decisive[k] = r
 		}
 	}
 	var out []approval
-	for _, r := range last {
-		if r.State == "APPROVED" {
-			out = append(out, approval{Login: r.Login, Outdated: head != "" && r.Commit != head})
+	for _, r := range decisive {
+		if r.State != "DISMISSED" {
+			out = append(out, approval{Login: r.Login, Outdated: head != "" && r.Commit != head, State: r.State})
 		}
 	}
 	slices.SortFunc(out, func(a, b approval) int { return strings.Compare(strings.ToLower(a.Login), strings.ToLower(b.Login)) })
@@ -173,7 +185,7 @@ func runGhInput(ctx context.Context, input []byte, args ...string) ([]byte, erro
 // prListArgs are the gh arguments that list the open pull requests of repo for parsePRs.
 func prListArgs(repo string) []string {
 	// shortcut: at most 10000 open PRs per repository are listed, raise the limit if a watched repository has more.
-	// shortcut: gh does not page nested reviews, so only the oldest 100 reviews of a PR count toward Approvals;
+	// shortcut: gh does not page nested reviews, so only the oldest 100 reviews of a PR count toward Reviews;
 	// switch to a paged `gh api graphql` query if a watched PR gets more. latestReviews is not used: gh omits its commit.
 	return []string{"pr", "list", "--repo", "github.com/" + repo, "--state", "open",
 		"--limit", "10000", "--json", "number,title,url,author,createdAt,isDraft,headRefOid,labels,reviews"}

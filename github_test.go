@@ -29,7 +29,7 @@ func TestParsePRs(t *testing.T) {
 	}
 	want := []pullRequest{
 		{Repo: "a/b", Title: "Add <b>", URL: "https://github.com/a/b/pull/7", Author: "alice", Labels: []string{"dependencies", "go"}, Number: 7, Draft: true, HeadSHA: "abc123", Created: time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC),
-			Approvals: []approval{{Login: "bob", Outdated: true}, {Login: "carol"}}},
+			Reviews: []approval{{Login: "bob", Outdated: true, State: "APPROVED"}, {Login: "carol", State: "APPROVED"}, {Login: "ghost", State: "COMMENTED"}}},
 		{Repo: "a/b", Title: "Fix", URL: "https://github.com/a/b/pull/8", Author: "ghost", Number: 8, Created: time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)},
 	}
 	if fmt.Sprint(prs) != fmt.Sprint(want) {
@@ -46,9 +46,14 @@ func TestParsePRs(t *testing.T) {
 	}
 }
 
-func TestApprovalsOf(t *testing.T) {
+func TestReviewsOf(t *testing.T) {
 	const head = "h2"
-	ap := func(login, commit string) review { return review{login, "APPROVED", commit} }
+	rv := func(login, state, commit string) review { return review{login, state, commit} }
+	ap := func(login, commit string) review { return rv(login, "APPROVED", commit) }
+	st := func(login, state string, outdated bool) approval {
+		return approval{Login: login, Outdated: outdated, State: state}
+	}
+	ok := func(login string) approval { return st(login, "APPROVED", false) }
 	for _, tc := range []struct {
 		name    string
 		reviews []review
@@ -56,25 +61,31 @@ func TestApprovalsOf(t *testing.T) {
 		want    []approval
 	}{
 		{"no reviews", nil, head, nil},
-		{"only mine", []review{ap("me", head)}, head, []approval{{Login: "me"}}},
-		{"only others", []review{ap("bob", head), ap("alice", head)}, head, []approval{{Login: "alice"}, {Login: "bob"}}},
-		{"mine and others", []review{ap("me", head), ap("bob", head)}, head, []approval{{Login: "bob"}, {Login: "me"}}},
-		{"approval then changes requested", []review{ap("me", head), {"me", "CHANGES_REQUESTED", head}}, head, nil},
-		{"approval then commented", []review{ap("me", head), {"me", "COMMENTED", head}, {"me", "PENDING", ""}}, head, []approval{{Login: "me"}}},
-		{"dismissed approval", []review{ap("me", head), {"me", "DISMISSED", head}}, head, nil},
-		{"changes requested then approval", []review{{"me", "CHANGES_REQUESTED", "h1"}, ap("me", head)}, head, []approval{{Login: "me"}}},
-		{"outdated", []review{ap("me", "h1")}, head, []approval{{Login: "me", Outdated: true}}},
+		{"only mine", []review{ap("me", head)}, head, []approval{ok("me")}},
+		{"only others", []review{ap("bob", head), ap("alice", head)}, head, []approval{ok("alice"), ok("bob")}},
+		{"mine and others", []review{ap("me", head), ap("bob", head)}, head, []approval{ok("bob"), ok("me")}},
+		{"changes requested", []review{rv("me", "CHANGES_REQUESTED", head)}, head, []approval{st("me", "CHANGES_REQUESTED", false)}},
+		{"commented", []review{rv("me", "COMMENTED", "h1"), rv("me", "COMMENTED", head)}, head, []approval{st("me", "COMMENTED", false)}},
+		{"approval then changes requested", []review{ap("me", head), rv("me", "CHANGES_REQUESTED", head)}, head, []approval{st("me", "CHANGES_REQUESTED", false)}},
+		{"approval then commented", []review{ap("me", "h1"), rv("me", "COMMENTED", head), rv("me", "PENDING", "")}, head, []approval{st("me", "APPROVED", true)}},
+		{"commented then changes requested", []review{rv("me", "COMMENTED", head), rv("me", "CHANGES_REQUESTED", "h1")}, head, []approval{st("me", "CHANGES_REQUESTED", true)}},
+		{"only pending", []review{rv("me", "PENDING", "")}, head, nil},
+		{"dismissed approval", []review{ap("me", head), rv("me", "DISMISSED", head)}, head, nil},
+		{"dismissed then commented", []review{ap("me", head), rv("me", "DISMISSED", head), rv("me", "COMMENTED", head)}, head, nil},
+		{"changes requested then approval", []review{rv("me", "CHANGES_REQUESTED", "h1"), ap("me", head)}, head, []approval{ok("me")}},
+		{"outdated", []review{ap("me", "h1")}, head, []approval{st("me", "APPROVED", true)}},
 		{"mixed current and outdated", []review{ap("carol", "h1"), ap("alice", head), ap("bob", head)}, head,
-			[]approval{{Login: "alice"}, {Login: "bob"}, {Login: "carol", Outdated: true}}},
-		{"reapproved at head", []review{ap("me", "h1"), ap("me", head)}, head, []approval{{Login: "me"}}},
-		{"case-insensitive login", []review{ap("Me", head), {"me", "CHANGES_REQUESTED", head}, ap("bob", "h1"), ap("BOB", head)}, head, []approval{{Login: "BOB"}}},
-		{"ghost author", []review{ap("", head)}, head, []approval{{Login: "ghost"}}},
-		{"empty head", []review{ap("me", "h1")}, "", []approval{{Login: "me"}}},
-		{"sort order", []review{ap("zed", head), ap("Bob", head), ap("alice", head), ap("carl", head)}, head,
-			[]approval{{Login: "alice"}, {Login: "Bob"}, {Login: "carl"}, {Login: "zed"}}},
+			[]approval{ok("alice"), ok("bob"), st("carol", "APPROVED", true)}},
+		{"reapproved at head", []review{ap("me", "h1"), ap("me", head)}, head, []approval{ok("me")}},
+		{"case-insensitive login", []review{ap("Me", head), rv("me", "CHANGES_REQUESTED", head), ap("bob", "h1"), ap("BOB", head)}, head,
+			[]approval{ok("BOB"), st("me", "CHANGES_REQUESTED", false)}},
+		{"ghost author", []review{ap("", head)}, head, []approval{ok("ghost")}},
+		{"empty head", []review{ap("me", "h1")}, "", []approval{ok("me")}},
+		{"sort order", []review{ap("zed", head), rv("Bob", "COMMENTED", head), ap("alice", head), ap("carl", head)}, head,
+			[]approval{ok("alice"), st("Bob", "COMMENTED", false), ok("carl"), ok("zed")}},
 	} {
-		if got := approvalsOf(tc.reviews, tc.head); !slices.Equal(got, tc.want) {
-			t.Errorf("%s: approvalsOf = %+v, want %+v", tc.name, got, tc.want)
+		if got := reviewsOf(tc.reviews, tc.head); !slices.Equal(got, tc.want) {
+			t.Errorf("%s: reviewsOf = %+v, want %+v", tc.name, got, tc.want)
 		}
 	}
 }

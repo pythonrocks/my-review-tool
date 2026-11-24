@@ -41,9 +41,11 @@ func TestParseFilterAndQuery(t *testing.T) {
 func TestFilterMatch(t *testing.T) {
 	pr := pullRequest{Repo: "acme/web", Author: "app/dependabot", Requested: true}
 	approvedMe := pr
-	approvedMe.Approvals = []approval{{Login: "alice"}, {Login: "ME"}}
+	approvedMe.Reviews = []approval{{Login: "alice", State: "APPROVED"}, {Login: "ME", State: "APPROVED"}}
 	approvedMeOld := pr
-	approvedMeOld.Approvals = []approval{{Login: "me", Outdated: true}, {Login: "alice"}}
+	approvedMeOld.Reviews = []approval{{Login: "me", Outdated: true, State: "APPROVED"}, {Login: "alice", State: "APPROVED"}}
+	changesMe := pr
+	changesMe.Reviews = []approval{{Login: "alice", State: "APPROVED"}, {Login: "me", State: "CHANGES_REQUESTED"}}
 	notMine := pr
 	notMine.Requested = false
 	human := jobStatus{Status: statusDone, riskDecision: riskDecision{Risk: "High", Recommendation: recHuman}}
@@ -92,6 +94,7 @@ func TestFilterMatch(t *testing.T) {
 		{"hide skipped keeps done", dashFilter{HideSkipped: true}, pr, human, true, "", true},
 		{"hide approved", dashFilter{HideApproved: true}, approvedMe, human, true, "me", false},
 		{"hide approved outdated", dashFilter{HideApproved: true}, approvedMeOld, human, true, "me", true},
+		{"hide approved keeps changes requested", dashFilter{HideApproved: true}, changesMe, human, true, "me", true},
 		{"hide approved by others", dashFilter{HideApproved: true}, approvedMe, human, true, "bob", true},
 		{"hide approved login unknown", dashFilter{HideApproved: true}, approvedMe, human, true, "", true},
 		{"AND all pass", dashFilter{Org: "acme", Risk: []string{"Medium", "High"}, Rec: []string{"human"}, Mine: true, HideSkipped: true}, pr, human, true, "", true},
@@ -112,9 +115,9 @@ func filterSetup(t *testing.T) (config, *poller, *reviewQueue) {
 	cfg := config{Repositories: []string{"acme/web", "Acme2/api", "other/x"}, Concurrency: 2}
 	prs := []pullRequest{
 		{Repo: "acme/web", Number: 1, Author: "alice", Created: day(1), Requested: true},
-		{Repo: "acme/web", Number: 2, Author: "Bob", Created: day(2), Approvals: []approval{{Login: "me"}}},
+		{Repo: "acme/web", Number: 2, Author: "Bob", Created: day(2), Reviews: []approval{{Login: "me", State: "APPROVED"}}},
 		{Repo: "Acme2/api", Number: 3, Author: "app/dependabot", Created: day(3)},
-		{Repo: "other/x", Number: 4, Author: "alice", Created: day(4), Approvals: []approval{{Login: "me", Outdated: true}}},
+		{Repo: "other/x", Number: 4, Author: "alice", Created: day(4), Reviews: []approval{{Login: "me", Outdated: true, State: "APPROVED"}}},
 		{Repo: "other/x", Number: 5, Author: "carol", Created: day(5), Requested: true},
 	}
 	byRepo := map[string][]pullRequest{}

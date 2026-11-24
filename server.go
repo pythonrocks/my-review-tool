@@ -687,29 +687,40 @@ func reviewDots(s jobStatus) reviewIndicator {
 	return ind
 }
 
-// approvalInd is one Approved indicator: ✅ for me or 👥 for others, with its label.
+// approvalInd is one Status indicator: my ✅, ⛔ or 💬, or 👥 for others' approvals, with its label.
 type approvalInd struct {
 	Symbol, Label string
 	Outdated      bool
 }
 
-// approvalSummary is a PR's approvals split into my indicator and the others', me first,
+// approvalSummary is a PR's review status split into my indicator and the others' approvals, me first,
 // with Text joining their labels for the details page ("none" when there are none).
 type approvalSummary struct {
 	Inds []approvalInd
 	Text string
 }
 
-// approvalsView splits pr.Approvals by login (case-insensitive); with no login known every approval is others'.
+// reviewStates maps a submitted review event to the review state GitHub records for it.
+var reviewStates = map[string]string{"APPROVE": "APPROVED", "REQUEST_CHANGES": "CHANGES_REQUESTED", "COMMENT": "COMMENTED"}
+
+// myStatus is my indicator's symbol and label per review state.
+var myStatus = map[string][2]string{"APPROVED": {"✅", "Approved by me"}, "CHANGES_REQUESTED": {"⛔", "Changes requested by me"}, "COMMENTED": {"💬", "Commented by me"}}
+
+// approvalsView splits pr.Reviews by login (case-insensitive); with no login known every approval is others'.
 func approvalsView(pr pullRequest, login string) approvalSummary {
 	var s approvalSummary
 	var current, outdated []string
-	for _, a := range pr.Approvals {
+	for _, a := range pr.Reviews {
 		switch {
-		case login != "" && strings.EqualFold(a.Login, login) && a.Outdated:
-			s.Inds = append(s.Inds, approvalInd{"✅", "Approved by me on an older commit", true})
 		case login != "" && strings.EqualFold(a.Login, login):
-			s.Inds = append(s.Inds, approvalInd{"✅", "Approved by me", false})
+			if m, ok := myStatus[a.State]; ok {
+				label := m[1]
+				if a.Outdated {
+					label += " on an older commit"
+				}
+				s.Inds = append(s.Inds, approvalInd{m[0], label, a.Outdated})
+			}
+		case a.State != "APPROVED":
 		case a.Outdated:
 			outdated = append(outdated, a.Login)
 		default:
@@ -733,7 +744,7 @@ func approvalsView(pr pullRequest, login string) approvalSummary {
 		if i == 0 {
 			parts = []string{ind.Label}
 		} else {
-			parts = append(parts, "a"+strings.TrimPrefix(ind.Label, "A")) // every label starts with "Approved"
+			parts = append(parts, strings.ToLower(ind.Label[:1])+ind.Label[1:]) // every label starts with an ASCII letter
 		}
 	}
 	s.Text = strings.Join(parts, "; ")
@@ -1014,7 +1025,9 @@ func (f dashFilter) match(pr pullRequest, st jobStatus, known bool, login string
 	owner, _, _ := strings.Cut(pr.Repo, "/")
 	done := known && st.Status == statusDone
 	recOK := func(t string) bool { return st.Recommendation != "" && recTokens[t] == st.Recommendation }
-	mine := func(a approval) bool { return !a.Outdated && strings.EqualFold(a.Login, login) }
+	mine := func(a approval) bool {
+		return !a.Outdated && a.State == "APPROVED" && strings.EqualFold(a.Login, login)
+	}
 	switch {
 	case f.Org != "" && owner != f.Org,
 		f.Repo != "" && pr.Repo != f.Repo,
@@ -1023,7 +1036,7 @@ func (f dashFilter) match(pr pullRequest, st jobStatus, known bool, login string
 		len(f.Rec) > 0 && !(done && slices.ContainsFunc(f.Rec, recOK)),
 		f.Mine && !pr.Requested,
 		f.HideSkipped && st.Status == statusSkipped,
-		f.HideApproved && login != "" && slices.ContainsFunc(pr.Approvals, mine):
+		f.HideApproved && login != "" && slices.ContainsFunc(pr.Reviews, mine):
 		return false
 	}
 	return true
@@ -1825,9 +1838,7 @@ func newHandler(ch *configHolder, p *poller, q *reviewQueue,
 		case serr != nil:
 			fail(http.StatusInternalServerError, "the review was posted ("+u+") but saving the drafts failed: "+serr.Error())
 		default:
-			if event == "APPROVE" {
-				p.markApproved(pr.Repo, pr.Number, p.snapshot().Login, commit)
-			}
+			p.markReviewed(pr.Repo, pr.Number, p.snapshot().Login, commit, reviewStates[event])
 			w.Header().Set("HX-Redirect", fmt.Sprintf("/pr/%s/%d?submitted=%s&n=%d", pr.Repo, pr.Number, event, len(drafts)+len(replies)))
 			w.WriteHeader(http.StatusOK)
 		}
