@@ -149,9 +149,10 @@ func (p *poller) snapshot() pollSnapshot {
 		Fetched: slices.Sorted(maps.Keys(p.prs))}
 }
 
-// markApproved records login's approval of commit on repo#number until the next poll replaces it.
-// It assigns new slices because snapshot shares the old Approvals ones.
-func (p *poller) markApproved(repo string, number int, login, commit string) {
+// markReviewed records login's review of commit on repo#number with state (APPROVED, CHANGES_REQUESTED or
+// COMMENTED) until the next poll replaces it; a COMMENTED keeps a standing approval or change request.
+// It assigns new slices because snapshot shares the old Reviews ones.
+func (p *poller) markReviewed(repo string, number int, login, commit, state string) {
 	if login == "" {
 		return
 	}
@@ -162,10 +163,15 @@ func (p *poller) markApproved(repo string, number int, login, commit string) {
 	if i < 0 {
 		return
 	}
-	out := slices.DeleteFunc(slices.Clone(prs[i].Approvals), func(a approval) bool { return strings.EqualFold(a.Login, login) })
-	out = append(out, approval{Login: login, Outdated: commit != prs[i].HeadSHA})
+	if state == "COMMENTED" && slices.ContainsFunc(prs[i].Reviews, func(a approval) bool {
+		return strings.EqualFold(a.Login, login) && a.State != "COMMENTED"
+	}) {
+		return
+	}
+	out := slices.DeleteFunc(slices.Clone(prs[i].Reviews), func(a approval) bool { return strings.EqualFold(a.Login, login) })
+	out = append(out, approval{Login: login, Outdated: commit != prs[i].HeadSHA, State: state})
 	slices.SortFunc(out, func(a, b approval) int { return strings.Compare(strings.ToLower(a.Login), strings.ToLower(b.Login)) })
 	prs = slices.Clone(prs) // the list may be the fetch result, so it is not changed in place either
-	prs[i].Approvals = out
+	prs[i].Reviews = out
 	p.prs[repo] = prs
 }

@@ -42,7 +42,7 @@
 {{else if not .Rows}}<p class="muted">{{if eq .Query "mine=1"}}No open pull requests request your review.{{else}}No open pull requests match the filters.{{end}}</p>
 {{else}}<div class="table-scroll">
 <table class="pr-table">
-<thead><tr><th title="Review requested"><span aria-hidden="true">⭐</span><span class="visually-hidden">Review requested</span></th><th>Repository</th><th>Pull request</th><th>Author</th><th>Age</th><th>Draft</th><th>Approved</th><th>Review</th><th>Risk</th><th>Recommendation</th><th></th></tr></thead>
+<thead><tr><th title="Review requested"><span aria-hidden="true">⭐</span><span class="visually-hidden">Review requested</span></th><th>Repository</th><th>Pull request</th><th>Author</th><th>Age</th><th>Draft</th><th>Status</th><th>Review</th><th>Risk</th><th>Recommendation</th><th></th></tr></thead>
 <tbody>
 {{range .Rows}}{{template "row" (row . $)}}
 {{end}}</tbody>

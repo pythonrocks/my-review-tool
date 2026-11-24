@@ -504,32 +504,36 @@ func TestSubmitWithReplies(t *testing.T) {
 	}
 }
 
-// TestReviewApproveMarksDashboard: a successful APPROVE shows my ✅ on the dashboard without a poll; a failed or timed-out one does not.
+// TestReviewApproveMarksDashboard: a successful APPROVE or REQUEST_CHANGES shows my marker on the dashboard without a poll;
+// a failed or timed-out one does not.
 func TestReviewApproveMarksDashboard(t *testing.T) {
 	defer func(d time.Duration) { reviewTimeout = d }(reviewTimeout)
 	reviewTimeout = 50 * time.Millisecond
 	mine, older := approvedInd("Approved by me", "✅", false), approvedInd("Approved by me on an older commit", "✅", true)
+	changes := approvedInd("Changes requested by me", "⛔", false)
 	for _, c := range []struct {
-		name, status string // job status; done at rev1 approves an older commit
-		fn           func(ctx context.Context) (string, error)
-		want, not    string
+		name, event string
+		status      string // job status; done at rev1 reviews an older commit
+		fn          func(ctx context.Context) (string, error)
+		want, not   string
 	}{
-		{"current", statusQueued, nil, mine, older},
-		{"older commit", statusDone, nil, older, mine},
-		{"failed", statusQueued, func(context.Context) (string, error) { return "", errors.New("boom") }, "", "Approved by me"},
-		{"timed out", statusQueued, func(ctx context.Context) (string, error) { <-ctx.Done(); return "", errors.New("gh timed out") }, "", "Approved by me"},
+		{"current", "APPROVE", statusQueued, nil, mine, older},
+		{"older commit", "APPROVE", statusDone, nil, older, mine},
+		{"request changes", "REQUEST_CHANGES", statusQueued, nil, changes, "Approved by me"},
+		{"failed", "APPROVE", statusQueued, func(context.Context) (string, error) { return "", errors.New("boom") }, "", "Approved by me"},
+		{"timed out", "APPROVE", statusQueued, func(ctx context.Context) (string, error) { <-ctx.Done(); return "", errors.New("gh timed out") }, "", "Approved by me"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			cfg, p, q, j := doneSetup(t)
 			prs := p.snapshot().PRs
-			prs[2].Author, prs[2].Approvals = "bob", []approval{{Login: "alice"}, {Login: "zed", Outdated: true}}
+			prs[2].Author, prs[2].Reviews = "bob", []approval{{Login: "alice", State: "APPROVED"}, {Login: "zed", Outdated: true, State: "APPROVED"}}
 			f := &fakeFetch{prs: map[string][]pullRequest{"a/b": prs}}
 			p = newPoller(cfg.Repositories, f.fetch, func(context.Context) (string, error) { return "me", nil })
 			p.poll(context.Background())
 			fs := &fakeSubmit{fn: c.fn}
 			h := fresh(q, newHandler(newConfigHolder(cfg, "myreview.json"), p, q, fs.submit, notApproved, noFiles, noContent, noThreads, noResolve))
 			j.HeadSHA, j.Status = "rev1", c.status
-			code, body, _ := postReview(h, reviewForm(q, "APPROVE", "confirm", "1"))
+			code, body, _ := postReview(h, reviewForm(q, c.event, "confirm", "1", "body", "needs work"))
 			if (code == http.StatusOK) != (c.fn == nil) || fs.count() != 1 {
 				t.Fatalf("submit = %d %q, %d calls", code, body, fs.count())
 			}
@@ -558,7 +562,7 @@ func TestReviewApproveMarksDashboard(t *testing.T) {
 				t.Errorf("hide approved: row hidden %v", hidden)
 			}
 			p.poll(context.Background()) // the next poll replaces the mark with what GitHub returns
-			if strings.Contains(get("/", false), "Approved by me") {
+			if strings.Contains(get("/", false), c.want) {
 				t.Error("mark survived a poll")
 			}
 		})

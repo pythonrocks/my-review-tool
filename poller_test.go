@@ -191,37 +191,45 @@ func TestRunCallsOnPollKeepingFailedRepo(t *testing.T) {
 	}
 }
 
-func TestMarkApproved(t *testing.T) {
-	pr := pullRequest{Repo: "a/b", Number: 3, HeadSHA: "h2", Approvals: []approval{{Login: "alice"}, {Login: "ME", Outdated: true}, {Login: "zed"}}}
+func TestMarkReviewed(t *testing.T) {
+	pr := pullRequest{Repo: "a/b", Number: 3, HeadSHA: "h2", Reviews: []approval{{Login: "alice", State: "APPROVED"}, {Login: "ME", Outdated: true, State: "APPROVED"}, {Login: "zed", State: "COMMENTED"}}}
 	f := &fakeFetch{prs: map[string][]pullRequest{"a/b": {pr, {Repo: "a/b", Number: 4}}}}
 	p := newPoller([]string{"a/b"}, f.fetch, noLogin)
 	p.poll(context.Background())
-	approvals := func() string { return fmt.Sprint(p.snapshot().PRs[0].Approvals) }
-	before := p.snapshot().PRs[0].Approvals
+	reviews := func() string { return fmt.Sprint(p.snapshot().PRs[0].Reviews) }
+	before := p.snapshot().PRs[0].Reviews
 
-	p.markApproved("a/b", 3, "me", "h2") // replaces ME, case-insensitive, kept sorted
-	if got := approvals(); got != "[{alice false} {me false} {zed false}]" {
-		t.Errorf("replace: %s", got)
+	for _, c := range []struct {
+		name, login, commit, state, want string
+	}{
+		{"replaces ME, case-insensitive, kept sorted", "me", "h2", "APPROVED", "[{alice false APPROVED} {me false APPROVED} {zed false COMMENTED}]"},
+		{"comment keeps an approval", "me", "h2", "COMMENTED", "[{alice false APPROVED} {me false APPROVED} {zed false COMMENTED}]"},
+		{"changes requested replaces an approval", "Me", "h1", "CHANGES_REQUESTED", "[{alice false APPROVED} {Me true CHANGES_REQUESTED} {zed false COMMENTED}]"},
+		{"comment keeps a change request", "me", "h2", "COMMENTED", "[{alice false APPROVED} {Me true CHANGES_REQUESTED} {zed false COMMENTED}]"},
+		{"comment replaces a comment", "zed", "h1", "COMMENTED", "[{alice false APPROVED} {Me true CHANGES_REQUESTED} {zed true COMMENTED}]"},
+		{"approval replaces a comment", "zed", "h2", "APPROVED", "[{alice false APPROVED} {Me true CHANGES_REQUESTED} {zed false APPROVED}]"},
+	} {
+		p.markReviewed("a/b", 3, c.login, c.commit, c.state)
+		if got := reviews(); got != c.want {
+			t.Errorf("%s: %s, want %s", c.name, got, c.want)
+		}
 	}
-	if fmt.Sprint(before) != "[{alice false} {ME true} {zed false}]" || fmt.Sprint(f.prs["a/b"][0].Approvals) != fmt.Sprint(before) {
-		t.Errorf("an earlier snapshot or the fetch result changed: %v, %v", before, f.prs["a/b"][0].Approvals)
+	if fmt.Sprint(before) != "[{alice false APPROVED} {ME true APPROVED} {zed false COMMENTED}]" || fmt.Sprint(f.prs["a/b"][0].Reviews) != fmt.Sprint(before) {
+		t.Errorf("an earlier snapshot or the fetch result changed: %v, %v", before, f.prs["a/b"][0].Reviews)
 	}
-	p.markApproved("a/b", 3, "Me", "h1") // older commit
-	if got := approvals(); got != "[{alice false} {Me true} {zed false}]" {
-		t.Errorf("outdated: %s", got)
-	}
-	p.markApproved("a/b", 4, "me", "") // add; the commit is the (empty) head
-	if got := fmt.Sprint(p.snapshot().PRs[1].Approvals); got != "[{me false}]" {
+	p.markReviewed("a/b", 4, "me", "", "COMMENTED") // add; the commit is the (empty) head
+	if got := fmt.Sprint(p.snapshot().PRs[1].Reviews); got != "[{me false COMMENTED}]" {
 		t.Errorf("add: %s", got)
 	}
-	p.markApproved("a/b", 3, "", "h2")
-	p.markApproved("a/b", 9, "me", "h2")
-	p.markApproved("x/y", 3, "me", "h2")
-	if got := approvals(); got != "[{alice false} {Me true} {zed false}]" || len(p.snapshot().PRs) != 2 {
+	after := reviews()
+	p.markReviewed("a/b", 3, "", "h2", "APPROVED")
+	p.markReviewed("a/b", 9, "me", "h2", "APPROVED")
+	p.markReviewed("x/y", 3, "me", "h2", "APPROVED")
+	if got := reviews(); got != after || len(p.snapshot().PRs) != 2 {
 		t.Errorf("empty login or unknown PR changed state: %s", got)
 	}
 	p.poll(context.Background()) // the next poll is the source of truth
-	if got := approvals(); got != fmt.Sprint(before) {
+	if got := reviews(); got != fmt.Sprint(before) {
 		t.Errorf("after poll: %s", got)
 	}
 }
