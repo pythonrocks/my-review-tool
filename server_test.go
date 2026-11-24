@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -1028,6 +1029,24 @@ func TestStylesheet(t *testing.T) {
 	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "text/css; charset=utf-8" || !bytes.Equal(rec.Body.Bytes(), want) {
 		t.Errorf("GET /myreview.css = %d %q, %d bytes; want 200 text/css with the %d bytes of static/myreview.css",
 			rec.Code, rec.Header().Get("Content-Type"), rec.Body.Len(), len(want))
+	}
+}
+
+// Titles line up down the "What to check" list only if the severity/tags column
+// has the same fixed width on every row; each row is its own grid.
+func TestPointKindColumnFixed(t *testing.T) {
+	css, err := os.ReadFile("static/myreview.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules := regexp.MustCompile(`\.point-toggle \{[^}]*grid-template-columns: ([^;]+);`).FindAllSubmatch(css, -1)
+	if len(rules) != 2 {
+		t.Fatalf("found %d .point-toggle grid rules, want 2 (wide and narrow)", len(rules))
+	}
+	for _, r := range rules {
+		if tracks := strings.Fields(string(r[1])); len(tracks) < 2 || !regexp.MustCompile(`^\d+px$`).MatchString(tracks[1]) {
+			t.Errorf(".point-toggle columns %q: the severity/tags track must be a fixed px width", r[1])
+		}
 	}
 }
 

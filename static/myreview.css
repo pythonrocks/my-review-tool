@@ -386,15 +386,15 @@ details.post .alert { margin: 0; }
 .point-row:hover { background: color-mix(in srgb, var(--text) 3%, transparent); }
 /* the list rows are <details>/<summary>: number, kind, title, location, chevron */
 .point-toggle {
-  display: grid; grid-template-columns: 18px auto minmax(0, 1fr) minmax(0, 240px) auto 12px; align-items: center; gap: var(--s4);
+  display: grid; grid-template-columns: 18px 200px minmax(0, 1fr) minmax(0, 240px) auto 12px; align-items: center; gap: var(--s4);
   width: 100%; padding: 9px var(--s6) 9px 20px; border: 0; border-radius: 0; background: none; cursor: pointer; list-style: none;
   font: 400 13px/1.4 var(--font); color: var(--text); text-align: left;
 }
 .point-toggle::-webkit-details-marker { display: none; }
 .point-toggle:hover { background: color-mix(in srgb, var(--text) 3%, transparent); }
 .point-no { font: 11px var(--mono); color: var(--muted); }
-/* the severity badge and the finding's tags; they wrap within the cell rather than squeeze the title out */
-.point-kind { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 72px; max-width: 280px; }
+/* the severity badge and the finding's tags in a fixed-width column (a badge plus about two tags), so titles line up on every row; more tags wrap inside it */
+.point-kind { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
 .badge.tag { padding: 0 6px; font-size: 11px; line-height: 17px; }
 .point-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .point-loc { display: flex; min-width: 0; font: 12px var(--mono); color: var(--muted); }
@@ -545,8 +545,7 @@ a.dl-num:hover { color: var(--accent); text-decoration: none; }
 @media (max-width: 760px) {
   .diff-layout { grid-template-columns: minmax(0, 1fr); }
   .file-list { position: static; }
-  .point-toggle { grid-template-columns: 18px auto minmax(0, 1fr) 12px; }
-  .point-kind { min-width: 64px; max-width: 45vw; }
+  .point-toggle { grid-template-columns: 18px 136px minmax(0, 1fr) 12px; }
   .point-loc, .point-meta { display: none; }
   body { padding: var(--s6) var(--s4) var(--s8); }
   .signed-in { margin-left: 0; }
