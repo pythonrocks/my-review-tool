@@ -115,11 +115,9 @@
 </div>
 {{end}}{{end}}
 {{define "point-body"}}<div class="point-body">
-{{with .Finding.Step}}<p class="muted">{{recLabel .}}</p>
-{{end}}<p class="point-text">{{.Text}}</p>
+<div class="point-tools">{{with .Finding.Step}}<span class="muted">{{recLabel .}}</span>{{end}}<span class="tip"><button type="button" class="tip-btn" aria-label="Issue description" aria-describedby="tip-i-{{.ID}}">ⓘ</button><span role="tooltip" tabindex="0" id="tip-i-{{.ID}}">{{.Text}}</span></span>{{if not .Draft.PostedURL}}<span class="tip"><button type="button" class="tip-btn" data-restore="ta-{{.ID}}" aria-label="Restore the AI reviewer's comment" aria-describedby="tip-r-{{.ID}}">↺</button><span role="tooltip" tabindex="0" id="tip-r-{{.ID}}">{{.Comment}}</span></span>{{end}}</div>
 {{if .Excerpt}}<div class="excerpt" hx-get="/pr/{{.Report.Repo}}/{{.Report.Number}}/points/{{.ID}}/excerpt" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
 {{end}}{{template "threads" .Threads}}<div class="point-links"><a href="/pr/{{.Report.Repo}}/{{.Report.Number}}?view=diff&point={{.ID}}#d-{{.ID}}">Open in diff →</a><a class="loc" href="https://github.com/{{.Report.Repo}}/blob/{{.Report.SHA}}/{{pathEscape .File}}{{if .Line}}#L{{.Line}}{{end}}">{{.File}}{{if .Line}}:{{.Line}}{{end}}</a>{{if or .Prev .Next}}<span class="sep"></span>{{end}}{{with .Prev}}<a class="point-nav" href="#{{$.Anchor}}{{.}}">← Previous</a>{{end}}{{with .Next}}<a class="point-nav" href="#{{$.Anchor}}{{.}}">Next →</a>{{end}}</div>
-<div class="suggested"><p class="muted">Suggested comment</p><pre class="text">{{.Comment}}</pre></div>
 {{template "editor" .}}
 </div>{{end}}
 {{define "editor"}}<div class="editor">

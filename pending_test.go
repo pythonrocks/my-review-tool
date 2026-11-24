@@ -184,7 +184,10 @@ func TestDraftEndpoints(t *testing.T) {
 	if code, body := send(h, http.MethodPut, "/pr/a/b/3/drafts/f4", url.Values{"text": {"mine <b>"}}); code != http.StatusOK || !strings.Contains(body, ">Edited</span>") {
 		t.Fatalf("PUT = %d %q", code, body)
 	}
-	send(h, http.MethodPut, "/pr/a/b/3/drafts/f4", url.Values{"text": {"Please fix crit."}})
+	// restoring the suggested comment keeps it edited
+	if code, body := send(h, http.MethodPut, "/pr/a/b/3/drafts/f4", url.Values{"text": {"Please fix crit."}}); code != http.StatusOK || !strings.Contains(body, ">Edited</span>") {
+		t.Fatalf("restore PUT = %d %q", code, body)
+	}
 	if d := draft("f4"); !d.Edited || d.Text != "Please fix crit." || d.SourceText != "crit\nsecond line" {
 		t.Errorf("draft %+v", d)
 	}
@@ -253,9 +256,17 @@ func TestDraftPosted(t *testing.T) {
 	if after := q.pending.get("a/b#3"); !reflect.DeepEqual(after, before) {
 		t.Errorf("stored %+v, want %+v", after, before)
 	}
-	mustContain(t, pageOf(t, h), `<span class="state state-posted" id="state-f4" hx-swap-oob="true">Posted</span>`, `<textarea id="ta-f4" name="text" rows="6" readonly>`,
+	pg := pageOf(t, h)
+	mustContain(t, pg, `<span class="state state-posted" id="state-f4" hx-swap-oob="true">Posted</span>`, `<textarea id="ta-f4" name="text" rows="6" readonly>`,
 		`<div class="editor-actions" id="ea-f4"><a class="posted" href="https://github.com/a/b/pull/3#discussion_r1">Posted</a></div>`,
-		`<a class="posted" href="https://github.com/a/b/pull/3#pullrequestreview-1">Posted</a>`, "Submit review (0)")
+		`<a class="posted" href="https://github.com/a/b/pull/3#pullrequestreview-1">Posted</a>`, "Submit review (0)",
+		`aria-describedby="tip-i-f4"`, `aria-describedby="tip-i-p2"`, `data-restore="ta-f3"`)
+	// a posted row has no restore control
+	for _, no := range []string{`data-restore="ta-f4"`, `id="tip-r-f4"`, `data-restore="ta-p2"`, `id="tip-r-p2"`} {
+		if strings.Contains(pg, no) {
+			t.Errorf("page has %q", no)
+		}
+	}
 }
 
 func TestPendingNotFound(t *testing.T) {

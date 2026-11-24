@@ -1,5 +1,6 @@
 // Details page keys: j/k next/previous point, c comment on the current point. Previous / Next links open their
-// target, and "Files with points only" hides the other files of the diff.
+// target, and "Files with points only" hides the other files of the diff. A point's restore icon puts the AI
+// reviewer's comment back into its editor.
 (function () {
   var current = null; // the point (list row or diff block) last moved to or clicked
   var focusAfterLoad = null; // the id of a textarea to focus once its point body has loaded
@@ -17,6 +18,11 @@
   }
 
   document.addEventListener("keydown", function (e) {
+    // Escape hides a keyboard-focused tooltip (.tip:focus-within)
+    if (e.key === "Escape" && document.activeElement && document.activeElement.matches(".tip-btn, .tip [role='tooltip']")) {
+      document.activeElement.blur();
+      return;
+    }
     if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest("input, textarea, select, [contenteditable]")) return;
     if (e.key !== "j" && e.key !== "k" && e.key !== "c") return;
     var ps = points();
@@ -76,6 +82,13 @@
   });
 
   document.addEventListener("click", function (e) {
+    // Restore puts the AI reviewer's comment (the button's tooltip) back; the input event autosaves it via hx-trigger
+    var restore = e.target.closest("button[data-restore]");
+    var ta = restore && document.getElementById(restore.dataset.restore);
+    if (ta) {
+      ta.value = restore.parentNode.querySelector("[role='tooltip']").textContent;
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    }
     var p = e.target.closest("li.point, .inline");
     if (p) current = p;
     var nav = e.target.closest("a.point-nav");
