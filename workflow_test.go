@@ -418,11 +418,11 @@ func TestRunWorkflowFindingsAndCleanup(t *testing.T) {
 	}
 	st := runWorkflow(context.Background(), pr(1), workflow{noPolicy, tmpPrepare(t, &tmps), review("High"), review("Low"), riskStep, time.Minute})
 	slices.SortFunc(st.Findings, byStep)
-	want := []taggedFinding{{Step: "code review", finding: finding{Severity: "High", File: "a.go", Description: "d", Line: 1}}, {Step: "security review", finding: finding{Severity: "Low", File: "a.go", Description: "d", Line: 1}}}
-	if st.Status != statusDone || st.FailedStep != "" || st.Reason != "" || !slices.Equal(st.Findings, want) || st.Summary != "summary High" {
+	want := []taggedFinding{{Step: "code review", finding: finding{Severity: "High", File: "a.go", Description: "d", Line: 1}}, {Step: "security review", finding: finding{Severity: "Low", File: "a.go", Description: "d", Line: 1, Tags: []string{"security"}}}}
+	if st.Status != statusDone || st.FailedStep != "" || st.Reason != "" || !reflect.DeepEqual(st.Findings, want) || st.Summary != "summary High" {
 		t.Fatalf("result = %+v", st)
 	}
-	if !slices.Equal(riskGot, want) {
+	if !reflect.DeepEqual(riskGot, want) {
 		t.Errorf("risk step got findings %+v, want %+v", riskGot, want)
 	}
 	wantRisk := decideRisk(want, []areaEntry{{Area: "authentication", File: "b.go", Line: 2, Reason: "login"}}, []pointOfInterest{{File: "c.go", Line: 0, Reason: "extra"}}, defaultThreshold, defaultSensitiveAreas)
@@ -466,7 +466,7 @@ func TestQueueFindings(t *testing.T) {
 	f.next(t).ret <- nil
 	waitStatus(t, q, 1, statusDone)
 	want := []taggedFinding{{Step: "code review", finding: f.findings[0]}}
-	if got := q.statuses()[key(1)]; !slices.Equal(got.Findings, want) || got.Summary != "Adds a." || got.HeadSHA != "h1" ||
+	if got := q.statuses()[key(1)]; !reflect.DeepEqual(got.Findings, want) || got.Summary != "Adds a." || got.HeadSHA != "h1" ||
 		!reflect.DeepEqual(got.riskDecision, decideRisk(want, nil, nil, defaultThreshold, defaultSensitiveAreas)) {
 		t.Fatalf("done = %+v, want findings %+v", got, want)
 	}

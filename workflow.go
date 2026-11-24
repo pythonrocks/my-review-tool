@@ -197,6 +197,7 @@ func runWorkflow(ctx context.Context, pr pullRequest, w workflow) jobStatus {
 			cancelPair()
 		}
 		for _, f := range r.res.Findings {
+			f.Tags = normTags(r.m.Step, f.Tags)
 			findings = append(findings, taggedFinding{Step: r.m.Step, finding: f})
 		}
 		if r.m.Step == "code review" {

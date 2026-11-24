@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -71,10 +72,18 @@ func TestParseFindings(t *testing.T) {
 		{"under dir", f("Low", dir+"/x/y.go", "0", "d"), []finding{{Severity: "Low", File: "x/y.go", Description: "d", Line: 0}}},
 		{"under real dir", f("Critical", real+"/z.go", "1", "d"), []finding{{Severity: "Critical", File: "z.go", Description: "d", Line: 1}}},
 		{"long description", f("Medium", "a", "3", long), []finding{{Severity: "Medium", File: "a", Description: long[:2*maxDescription], Line: 3}}},
+		{"two tags", `{"findings":[{"severity":"Low","file":"a","line":1,"description":"d","tags":["test","bug"]}]}`,
+			[]finding{{Severity: "Low", File: "a", Description: "d", Line: 1, Tags: []string{"bug", "test"}}}},
+		{"unknown and duplicate tags", `{"findings":[{"severity":"Low","file":"a","line":1,"description":"d","tags":["style","<b>x</b>","docs","docs"]}]}`,
+			[]finding{{Severity: "Low", File: "a", Description: "d", Line: 1, Tags: []string{"docs"}}}},
+		{"null tags", `{"findings":[{"severity":"Low","file":"a","line":1,"description":"d","tags":null}]}`,
+			[]finding{{Severity: "Low", File: "a", Description: "d", Line: 1}}},
+		{"empty tags", `{"findings":[{"severity":"Low","file":"a","line":1,"description":"d","tags":[]}]}`,
+			[]finding{{Severity: "Low", File: "a", Description: "d", Line: 1}}},
 	}
 	for _, tc := range ok {
 		got, err := parseFindings([]byte(tc.in), dir, false)
-		if err != nil || !slices.Equal(got.Findings, tc.want) || got.Summary != "" {
+		if err != nil || !reflect.DeepEqual(got.Findings, tc.want) || got.Summary != "" {
 			t.Errorf("%s: got %v, %v; want %v", tc.name, got, err, tc.want)
 		}
 	}
@@ -83,6 +92,7 @@ func TestParseFindings(t *testing.T) {
 		{"two values", `{"findings":[]} {}`, "more than one JSON value"},
 		{"missing findings", `{}`, "findings is missing"},
 		{"unknown top field", `{"findings":[],"x":1}`, `unknown field "x"`},
+		{"tags not an array", `{"findings":[{"severity":"Low","file":"a","line":1,"description":"d","tags":"bug"}]}`, "cannot unmarshal string"},
 		{"unknown finding field", `{"findings":[{"severity":"Low","file":"a","line":1,"description":"d","cwe":1}]}`, `unknown field "cwe"`},
 		{"bad severity", `{"findings":[` + strings.Repeat(`{"severity":"Low","file":"a","line":1,"description":"d"},`, 2) + `{"severity":"Severe","file":"a","line":1,"description":"d"}]}`,
 			`findings[2].severity "Severe" is not Critical, High, Medium or Low`},
@@ -151,7 +161,7 @@ func TestRunAgentClaude(t *testing.T) {
 	rec := fakeAgent(t, "claude", `echo '{"type":"result","is_error":false,"result":"ok","total_cost_usd":0.1,"structured_output":{"summary":"Adds a.","findings":[{"severity":"High","file":"a.go","line":4,"description":"bug"}]}}'`)
 	dir, tmp := t.TempDir(), t.TempDir()
 	got, err := runAgent(context.Background(), "claude", "PROMPT\n## Pull request\n", dir, tmp, "code-review", nil)
-	if want := []finding{{Severity: "High", File: "a.go", Description: "bug", Line: 4}}; err != nil || !slices.Equal(got.Findings, want) || got.Summary != "Adds a." {
+	if want := []finding{{Severity: "High", File: "a.go", Description: "bug", Line: 4}}; err != nil || !reflect.DeepEqual(got.Findings, want) || got.Summary != "Adds a." {
 		t.Fatalf("runAgent = %v, %v; want %v", got, err, want)
 	}
 	wantArgs := []string{"-p", "--restricted", "--tools", "Read,Grep,Glob", "--strict-mcp-config", "--permission-prompts", "none",
@@ -175,7 +185,7 @@ func TestRunAgentCodex(t *testing.T) {
 	rec := fakeAgent(t, "codex", `echo '{"findings":[{"severity":"Low","file":"b.go","line":0,"description":"nit"}]}' > "$out"`)
 	dir, tmp := t.TempDir(), t.TempDir()
 	got, err := runAgent(context.Background(), "codex", "PROMPT\n## Pull request\n", dir, tmp, "security-review", nil)
-	if want := []finding{{Severity: "Low", File: "b.go", Description: "nit", Line: 0}}; err != nil || !slices.Equal(got.Findings, want) {
+	if want := []finding{{Severity: "Low", File: "b.go", Description: "nit", Line: 0}}; err != nil || !reflect.DeepEqual(got.Findings, want) {
 		t.Fatalf("runAgent = %v, %v; want %v", got, err, want)
 	}
 	wantArgs := []string{"exec", "--sandbox", "read-only", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config", "--ignore-rules",
@@ -326,6 +336,30 @@ func TestParseFindingsTitleAndComment(t *testing.T) {
 		got, err := parseFindings([]byte(in), t.TempDir(), false)
 		if err != nil || len(got.Findings) != 1 || got.Findings[0].Title != tc.title || got.Findings[0].SuggestedComment != tc.comment {
 			t.Errorf("%s: got %+v, %v", tc.name, got, err)
+		}
+	}
+}
+
+func TestSchemaTagsMatchFindingTags(t *testing.T) {
+	for name, schema := range map[string]string{"findings": findingsSchema, "code-review": codeReviewSchema} {
+		var s struct {
+			Properties struct {
+				Findings struct {
+					Items struct {
+						Required   []string
+						Properties struct {
+							Tags struct{ Items struct{ Enum []string } }
+						}
+					}
+				}
+			}
+		}
+		if err := json.Unmarshal([]byte(schema), &s); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		it := s.Properties.Findings.Items
+		if !slices.Contains(it.Required, "tags") || !slices.Equal(it.Properties.Tags.Items.Enum, findingTags) {
+			t.Errorf("%s: required %v, tags enum %v; want tags required and enum %v", name, it.Required, it.Properties.Tags.Items.Enum, findingTags)
 		}
 	}
 }

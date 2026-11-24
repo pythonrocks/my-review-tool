@@ -40,8 +40,8 @@ func TestStoreRoundTrip(t *testing.T) {
 	s := newStore(t)
 	for _, st := range []jobStatus{
 		{Status: statusDone, Summary: "Adds a.\nBecause b.", HeadSHA: "abc123", Findings: []taggedFinding{
-			{Step: "code review", finding: finding{Severity: "high", File: "a.go", Line: 3, Description: "bug", Title: "Bug in a", SuggestedComment: "Fix **a**."}, PostedURL: "https://github.com/o/r/pull/1#discussion_r1"},
-			{Step: "security review", finding: finding{Severity: "low", File: "b.go", Description: "meh"}},
+			{Step: "code review", finding: finding{Severity: "high", File: "a.go", Line: 3, Description: "bug", Title: "Bug in a", SuggestedComment: "Fix **a**.", Tags: []string{"bug", "test"}}, PostedURL: "https://github.com/o/r/pull/1#discussion_r1"},
+			{Step: "security review", finding: finding{Severity: "low", File: "b.go", Description: "meh", Tags: []string{"security", "performance"}}},
 		}, Threshold: "Medium", ThresholdSource: policySourceRepo, SensitiveAreas: []string{"payments", "data model"}, AreasSource: policySourceRepo,
 			riskDecision: riskDecision{Recommendation: recHuman, Risk: "Medium", Rationale: []string{"r1", "r2"},
 				Points: []pointOfInterest{{File: "a.go", Line: 3, Reason: "High code review finding: bug"}, {File: "c.go", Line: 0, Reason: "extra", Title: "Extra", Comment: "Why c?"}}}},
@@ -85,6 +85,18 @@ func TestStoreRoundTrip(t *testing.T) {
 		if !strings.Contains(string(data), field) {
 			t.Errorf("file lacks %s: %s", field, data)
 		}
+	}
+}
+
+func TestStoreLoadWithoutTags(t *testing.T) {
+	s := newStore(t)
+	// saved before tags existed
+	os.WriteFile(s.file(prKey(storePR)), []byte(`{"repo":"octo/app","number":42,"head_sha":"abc123","status":"done","recommendation":"automated review is sufficient",`+
+		`"threshold":"High","findings":[{"step":"code review","severity":"Low","file":"a.go","line":1,"description":"d"},`+
+		`{"step":"security review","severity":"High","file":"b.go","line":2,"description":"e","tags":["bug","style"]}]}`), 0600)
+	st, ok := s.load(storePR)
+	if !ok || len(st.Findings) != 2 || st.Findings[0].Tags != nil || !reflect.DeepEqual(st.Findings[1].Tags, []string{"security", "bug"}) {
+		t.Fatalf("load = %+v, %v", st.Findings, ok)
 	}
 }
 

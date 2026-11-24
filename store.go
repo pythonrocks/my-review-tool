@@ -16,14 +16,15 @@ import (
 type resultStore struct{ dir string }
 
 type savedFinding struct {
-	Step             string `json:"step"`
-	Severity         string `json:"severity"`
-	File             string `json:"file"`
-	Line             int    `json:"line"`
-	Description      string `json:"description"`
-	Title            string `json:"title"`
-	SuggestedComment string `json:"suggested_comment"`
-	PostedURL        string `json:"posted_url"`
+	Step             string   `json:"step"`
+	Severity         string   `json:"severity"`
+	File             string   `json:"file"`
+	Line             int      `json:"line"`
+	Description      string   `json:"description"`
+	Title            string   `json:"title"`
+	SuggestedComment string   `json:"suggested_comment"`
+	Tags             []string `json:"tags"`
+	PostedURL        string   `json:"posted_url"`
 }
 
 type savedResult struct {
@@ -87,7 +88,7 @@ func (s resultStore) save(pr pullRequest, st jobStatus) {
 		SensitiveAreasSource: st.AreasSource, Metrics: st.Metrics}
 	for _, f := range st.Findings {
 		r.Findings = append(r.Findings, savedFinding{Step: f.Step, Severity: f.Severity, File: f.File, Line: f.Line, Description: f.Description,
-			Title: f.Title, SuggestedComment: f.SuggestedComment, PostedURL: f.PostedURL})
+			Title: f.Title, SuggestedComment: f.SuggestedComment, Tags: f.Tags, PostedURL: f.PostedURL})
 	}
 	name := s.file(prKey(pr))
 	if err := s.write(name, r); err != nil {
@@ -159,7 +160,7 @@ func (s resultStore) load(pr pullRequest) (jobStatus, bool) {
 	}
 	for _, f := range r.Findings {
 		st.Findings = append(st.Findings, taggedFinding{f.Step, finding{Severity: f.Severity, File: f.File, Line: f.Line, Description: f.Description,
-			Title: f.Title, SuggestedComment: f.SuggestedComment}, f.PostedURL})
+			Title: f.Title, SuggestedComment: f.SuggestedComment, Tags: normTags(f.Step, f.Tags)}, f.PostedURL})
 	}
 	return st, true
 }

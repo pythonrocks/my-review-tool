@@ -17,7 +17,7 @@ Give every finding exactly one of these severities:
 
 Reply with exactly one JSON object and nothing else:
 
-{"summary": "...", "findings": [{"severity": "High", "file": "internal/auth/login.go", "line": 42, "description": "...", "title": "Session token is not checked for expiry", "suggested_comment": "..."}]}
+{"summary": "...", "findings": [{"severity": "High", "file": "internal/auth/login.go", "line": 42, "description": "...", "title": "Session token is not checked for expiry", "suggested_comment": "...", "tags": ["bug"]}]}
 
 - summary: a short plain-language overview of the pull request in 2 to 5 sentences: what it changes and why. Describe the change only; do not judge its quality or repeat the findings.
 - severity: Critical, High, Medium or Low.
@@ -26,6 +26,14 @@ Reply with exactly one JSON object and nothing else:
 - description: what is wrong, why it matters, and how to fix it.
 - title: a short one-line title naming the problem, at most 80 characters.
 - suggested_comment: a comment to the PR author, ready to post as an inline review comment on that line. Say what is wrong and how to fix it, in a constructive tone. Markdown is allowed. No severity prefix.
+- tags: one or more kinds of problem, from this list:
+  - security: a security weakness.
+  - bug: incorrect behavior, a logic error or broken error handling.
+  - performance: needless slowness or resource use.
+  - code-smell: a design or code-quality problem that may hide a defect.
+  - maintainability: code that is hard to understand or change safely.
+  - test: missing or wrong tests.
+  - docs: missing, wrong or outdated documentation or comments.
 - No other fields. If you find nothing, reply {"summary": "...", "findings": []}.
 
 ## Untrusted input

@@ -135,6 +135,8 @@ func TestDiffView(t *testing.T) {
 		// two items on the renamed file's line 7
 		`<span class="dl-mark"><a class="mark" href="#d-f4" title="Point 1: Crit title">1<span class="review-mark" data-review-mark="f4"></span></a><a class="mark" href="#d-p2" title="Point 8: First point">8<span class="review-mark" data-review-mark="p2"></span></a></span>`,
 		`<div class="inline point" id="d-f4">`, `<div class="inline point" id="d-p2">`,
+		`<span class="point-no">1</span><span class="point-kind"><span class="badge sev-critical">Critical</span><span class="badge plain tag">security</span><span class="badge plain tag">bug</span></span>`,
+		`<span class="point-no">8</span><span class="point-kind"><span class="badge plain kind-point">Point</span></span>`,
 		`hx-get="/pr/a/b/3/diff/comment-form?path=dir%2Fa&#43;b%23%3F%25.go&line=7"`,
 		// gaps: leading, middle, trailing; none for the added and removed files
 		`<div class="dl-gap"><button class="link-btn" type="button" hx-get="/pr/a/b/3/diff/expand?path=a.go&from=1&to=4" hx-target="closest .dl-gap" hx-swap="outerHTML">↕ Expand</button></div>`,

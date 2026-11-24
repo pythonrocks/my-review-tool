@@ -108,6 +108,8 @@ The sensitive areas and the severity threshold come from the repository's policy
 2. every sensitive-area entry, path matches first, then the agent's in its order, reason `Sensitive area <area>: <reason>`, the entry's title and suggested comment;
 3. the agent's own `points_of_interest` in its order, as given.
 
+**Tags.** In "What to check", in the list and in the diff view, each finding shows one or more tags after its severity badge, naming the kind of problem: `security` (a security weakness), `bug` (incorrect behavior), `performance` (needless slowness or resource use), `code-smell` (a design or code-quality problem that may hide a defect), `maintainability` (hard to understand or change), `test` (missing or wrong tests) and `docs` (missing or wrong documentation). Every security review finding has `security`. Points of interest and your line comments have no tags.
+
 ### Diff view
 
 `?view=diff` on the details page shows the PR's diff for a done review of the current head only. Otherwise it shows one alert: `The diff is shown once the review is done.`, or, when the result is outdated or GitHub answers for another commit, `The diff is shown for the reviewed commit only; the pull request moved to <short head>. Re-run or wait for the new review.` A `gh` error shows `Could not load the diff: <error>`; reloading retries.

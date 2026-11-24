@@ -44,7 +44,7 @@ func TestQueueSavesAndRestores(t *testing.T) {
 	q2.sync([]pullRequest{prs[0], prs[1], hpr(3, "new head"), hpr(4, "h4")})
 	got := q2.statuses()
 	for n := 1; n <= 2; n++ {
-		if g, w := got[key(n)], want[key(n)]; g.Status != w.Status || g.FailedStep != w.FailedStep || g.Reason != w.Reason || g.Summary != w.Summary || g.HeadSHA != w.HeadSHA || !reflect.DeepEqual(g.riskDecision, w.riskDecision) || len(g.Findings) != len(w.Findings) || (len(g.Findings) > 0 && g.Findings[0] != w.Findings[0]) {
+		if g, w := got[key(n)], want[key(n)]; g.Status != w.Status || g.FailedStep != w.FailedStep || g.Reason != w.Reason || g.Summary != w.Summary || g.HeadSHA != w.HeadSHA || !reflect.DeepEqual(g.riskDecision, w.riskDecision) || len(g.Findings) != len(w.Findings) || (len(g.Findings) > 0 && !reflect.DeepEqual(g.Findings[0], w.Findings[0])) {
 			t.Fatalf("%s restored as %+v, want %+v", key(n), g, w)
 		}
 	}
