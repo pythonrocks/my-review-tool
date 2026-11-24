@@ -1287,8 +1287,8 @@ func TestPRSize(t *testing.T) {
 		t.Errorf("PR without size data shows a Size entry:\n%s", d)
 	}
 
-	// A push: the next poll returns a new head and new numbers.
-	f.prs["a/b"][0] = pullRequest{Repo: "a/b", Number: 1, HeadSHA: "h1b", Additions: 950, Deletions: 23_700, ChangedFiles: 8, HasSize: true}
+	// A push: the next poll returns a new head and new numbers. A new slice, so only the second poll can deliver them.
+	f.prs["a/b"] = []pullRequest{{Repo: "a/b", Number: 1, HeadSHA: "h1b", Additions: 950, Deletions: 23_700, ChangedFiles: 8, HasSize: true}}
 	p.poll(context.Background())
 	mustContain(t, bodyOf(t, cfg, p), `<span class="stat-add">+950</span> <span class="stat-del">−23.7k</span>`)
 	_, d = details(t, cfg, p, q, "/pr/a/b/1")
