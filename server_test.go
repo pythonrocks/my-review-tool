@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -573,7 +574,7 @@ func doneSetup(t *testing.T) (config, *poller, *reviewQueue, *job) {
 		{Step: "code review", finding: finding{Severity: "Low", File: "b.go", Line: 0, Description: "whole file"}},
 		{Step: "code review", finding: finding{Severity: "High", File: "b.go", Line: 20, Description: "b20"}},
 		{Step: "code review", finding: finding{Severity: "High", File: "b.go", Line: 3, Description: "b3"}},
-		{Step: "code review", finding: finding{Severity: "Critical", File: "dir/a b#?%.go", Line: 7, Description: "crit\nsecond line", Title: "Crit title", SuggestedComment: "Please fix crit."}},
+		{Step: "code review", finding: finding{Severity: "Critical", File: "dir/a b#?%.go", Line: 7, Description: "crit\nsecond line", Title: "Crit title", SuggestedComment: "Please fix crit.", Tags: []string{"security", "bug"}}},
 		{Step: "code review", finding: finding{Severity: "High", File: "a.go", Line: 9, Description: "a9"}},
 	}
 	j.riskDecision = riskDecision{Recommendation: recHuman, Risk: "High",
@@ -605,7 +606,7 @@ func TestDetailsDone(t *testing.T) {
 		"<nav class=\"view-tabs\">\n<a href=\"?view=list\" aria-current=\"page\">What to check <span class=\"pill pill-quiet\">8</span></a>\n<a href=\"?view=diff\">Diff</a>\n</nav>",
 		"<section class=\"context clamped\">\n<h2>Context</h2>\n<pre class=\"text\">Adds X.\nBecause Y.</pre>\n</section>",
 		"<p class=\"policy muted\">Severity threshold High (default) · Sensitive areas: authentication, authorization, data model (default)</p>",
-		`<li class="point" id="pt-f4"><input type="checkbox" class="point-check" id="chk-f4" aria-label="Mark point 1 as checked" hx-post="/pr/a/b/3/points/f4/checked" hx-vals='{"checked": "1"}' hx-swap="outerHTML"><details hx-get="/pr/a/b/3/points/f4" hx-trigger="toggle once" hx-target="find .point-body" hx-swap="outerHTML"><summary class="point-toggle"><span class="point-no">1</span><span><span class="badge sev-critical">Critical</span></span><span class="point-title" title="Crit title">Crit title</span><span class="point-loc" title="dir/a b#?%.go:7"><span>dir/a b#?%.go</span><span>:7</span></span><span class="point-meta"><span class="review-mark" data-review-mark="f4"></span><span class="state state-suggestion" id="state-f4" hx-swap-oob="true">Suggestion</span></span><span class="chev"></span></summary>`,
+		`<li class="point" id="pt-f4"><input type="checkbox" class="point-check" id="chk-f4" aria-label="Mark point 1 as checked" hx-post="/pr/a/b/3/points/f4/checked" hx-vals='{"checked": "1"}' hx-swap="outerHTML"><details hx-get="/pr/a/b/3/points/f4" hx-trigger="toggle once" hx-target="find .point-body" hx-swap="outerHTML"><summary class="point-toggle"><span class="point-no">1</span><span class="point-kind"><span class="badge sev-critical">Critical</span><span class="badge plain tag">security</span><span class="badge plain tag">bug</span></span><span class="point-title" title="Crit title">Crit title</span><span class="point-loc" title="dir/a b#?%.go:7"><span>dir/a b#?%.go</span><span>:7</span></span><span class="point-meta"><span class="review-mark" data-review-mark="f4"></span><span class="state state-suggestion" id="state-f4" hx-swap-oob="true">Suggestion</span></span><span class="chev"></span></summary>`,
 		"<div class=\"point-body\">\n<div class=\"point-tools\"><span class=\"muted\">Code review</span><span class=\"tip\"><button type=\"button\" class=\"tip-btn\" aria-label=\"Issue description\" aria-describedby=\"tip-i-f4\">ⓘ</button><span role=\"tooltip\" tabindex=\"0\" id=\"tip-i-f4\">crit\nsecond line</span></span><span class=\"tip\"><button type=\"button\" class=\"tip-btn\" data-restore=\"ta-f4\" aria-label=\"Restore the AI reviewer's comment\" aria-describedby=\"tip-r-f4\">↺</button><span role=\"tooltip\" tabindex=\"0\" id=\"tip-r-f4\">Please fix crit.</span></span></div>\n<div class=\"point-links\"><a href=\"/pr/a/b/3?view=diff&point=f4#d-f4\">Open in diff →</a><a class=\"loc\" href=\"https://github.com/a/b/blob/abc123/dir/a%20b%23%3F%25.go#L7\">dir/a b#?%.go:7</a><span class=\"sep\"></span><a class=\"point-nav\" href=\"#pt-f5\">Next →</a></div>\n<div class=\"editor\">\n<label class=\"label\" for=\"ta-f4\">Your comment on dir/a b#?%.go:7</label>\n<textarea id=\"ta-f4\" name=\"text\" rows=\"6\" hx-put=\"/pr/a/b/3/drafts/f4\" hx-trigger=\"input changed delay:800ms\" hx-target=\"#es-f4\" hx-swap=\"outerHTML\">\nPlease fix crit.</textarea>\n<div class=\"editor-actions\" id=\"ea-f4\"><button class=\"btn-sm\" type=\"button\" hx-post=\"/pr/a/b/3/drafts/f4/include\" hx-vals='{\"include\": \"1\"}' hx-target=\"#ea-f4\" hx-swap=\"outerHTML\">Add to review</button>\n<span class=\"editor-status\" id=\"es-f4\"></span></div>\n</div>\n</div></details></li>",
 		"<form class=\"review-controls\" hx-get=\"/pr/a/b/3/review/summary\" hx-target=\"#dialog-slot\">\n<fieldset class=\"seg\"><legend class=\"visually-hidden\">Review decision</legend>\n"+
 			"<input type=\"radio\" class=\"visually-hidden\" name=\"event\" value=\"APPROVE\" id=\"decision-approve\"><label for=\"decision-approve\">Approve</label>\n"+
@@ -615,7 +616,7 @@ func TestDetailsDone(t *testing.T) {
 		"<div id=\"dialog-slot\"></div>\n</div>\n</body>",
 		`<span class="point-loc" title="b.go"><span>b.go</span></span><span class="point-meta">`, `<a class="loc" href="https://github.com/a/b/blob/abc123/b.go">b.go</a>`,
 		"<div class=\"point-tools\"><span class=\"muted\">Security review</span><span class=\"tip\"><button type=\"button\" class=\"tip-btn\" aria-label=\"Issue description\" aria-describedby=\"tip-i-f0\">ⓘ</button><span role=\"tooltip\" tabindex=\"0\" id=\"tip-i-f0\">sec low</span></span><span class=\"tip\"><button type=\"button\" class=\"tip-btn\" data-restore=\"ta-f0\" aria-label=\"Restore the AI reviewer's comment\" aria-describedby=\"tip-r-f0\">↺</button><span role=\"tooltip\" tabindex=\"0\" id=\"tip-r-f0\">sec low</span></span></div>",
-		`<span class="point-no">7</span><span><span class="badge plain kind-point">Point</span></span><span class="point-title" title="second">second</span><span class="point-loc" title="z.go"><span>z.go</span></span>`,
+		`<span class="point-no">7</span><span class="point-kind"><span class="badge plain kind-point">Point</span></span><span class="point-title" title="second">second</span><span class="point-loc" title="z.go"><span>z.go</span></span>`,
 		"<div class=\"point-body\">\n<div class=\"point-tools\"><span class=\"tip\"><button type=\"button\" class=\"tip-btn\" aria-label=\"Issue description\" aria-describedby=\"tip-i-p0\">ⓘ</button><span role=\"tooltip\" tabindex=\"0\" id=\"tip-i-p0\">second</span></span><span class=\"tip\"><button type=\"button\" class=\"tip-btn\" data-restore=\"ta-p0\" aria-label=\"Restore the AI reviewer's comment\" aria-describedby=\"tip-r-p0\">↺</button><span role=\"tooltip\" tabindex=\"0\" id=\"tip-r-p0\">second</span></span></div>\n<div class=\"point-links\"><a href=\"/pr/a/b/3?view=diff&point=p0#d-p0\">Open in diff →</a><a class=\"loc\" href=\"https://github.com/a/b/blob/abc123/z.go\">z.go</a><span class=\"sep\"></span><a class=\"point-nav\" href=\"#pt-f0\">← Previous</a><a class=\"point-nav\" href=\"#pt-p2\">Next →</a></div>\n<div class=\"editor\">", "Add to review</button>\n<span class=\"editor-status\" id=\"es-p0\"></span></div>\n</div>\n</div></details></li>")
 	for _, no := range []string{"pt-p1", "Code review report", "Security report", "Risk recommendation", "Risk level", "Risk High: a Critical finding.", "third reason", "Points of interest", `class="count"`, "Approving needs confirmation", "Post as comment", "Approve anyway"} {
 		if strings.Contains(body, no) {
@@ -1028,6 +1029,24 @@ func TestStylesheet(t *testing.T) {
 	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "text/css; charset=utf-8" || !bytes.Equal(rec.Body.Bytes(), want) {
 		t.Errorf("GET /myreview.css = %d %q, %d bytes; want 200 text/css with the %d bytes of static/myreview.css",
 			rec.Code, rec.Header().Get("Content-Type"), rec.Body.Len(), len(want))
+	}
+}
+
+// Titles line up down the "What to check" list only if the severity/tags column
+// has the same fixed width on every row; each row is its own grid.
+func TestPointKindColumnFixed(t *testing.T) {
+	css, err := os.ReadFile("static/myreview.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules := regexp.MustCompile(`\.point-toggle \{[^}]*grid-template-columns: ([^;]+);`).FindAllSubmatch(css, -1)
+	if len(rules) != 2 {
+		t.Fatalf("found %d .point-toggle grid rules, want 2 (wide and narrow)", len(rules))
+	}
+	for _, r := range rules {
+		if tracks := strings.Fields(string(r[1])); len(tracks) < 2 || !regexp.MustCompile(`^\d+px$`).MatchString(tracks[1]) {
+			t.Errorf(".point-toggle columns %q: the severity/tags track must be a fixed px width", r[1])
+		}
 	}
 }
 

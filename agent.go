@@ -43,6 +43,7 @@ type finding struct {
 	Severity, File, Description string
 	Line                        int
 	Title, SuggestedComment     string
+	Tags                        []string
 }
 
 // agentInput builds an agent's stdin: the prompt, then the pull request block with its description, and the diff.
@@ -67,6 +68,7 @@ func parseFindings(data []byte, dir string, withSummary bool) (stepResult, error
 			Severity, File, Description, Title string
 			SuggestedComment                   string `json:"suggested_comment"`
 			Line                               *int
+			Tags                               []string
 		} `json:"findings"`
 	}
 	dec := json.NewDecoder(bytes.NewReader(data))
@@ -100,7 +102,7 @@ func parseFindings(data []byte, dir string, withSummary bool) (stepResult, error
 			return stepResult{}, formatError("findings[%d].description is empty", i)
 		}
 		findings = append(findings, finding{Severity: f.Severity, File: file, Line: *f.Line, Description: cutRunes(f.Description, maxDescription),
-			Title: shortTitle(f.Title), SuggestedComment: suggestedComment(f.SuggestedComment)})
+			Title: shortTitle(f.Title), SuggestedComment: suggestedComment(f.SuggestedComment), Tags: normTags("", f.Tags)})
 	}
 	res := stepResult{Findings: findings}
 	if withSummary {

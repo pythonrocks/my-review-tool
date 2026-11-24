@@ -135,6 +135,20 @@ func pathEscape(file string) string {
 
 var severityRank = map[string]int{"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
 
+// findingTags is the fixed set of finding kinds, in display order; the schemas and prompts mirror it.
+var findingTags = []string{"security", "bug", "performance", "code-smell", "maintainability", "test", "docs"}
+
+// normTags keeps the known tags, once each, in findingTags order; a security review finding always gets security.
+func normTags(step string, tags []string) []string {
+	var out []string
+	for _, t := range findingTags {
+		if slices.Contains(tags, t) || (t == "security" && step == "security review") {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // report is all findings of a result, code and security, sorted by severity, file, line, with what links need.
 type report struct {
 	Repo, SHA string
