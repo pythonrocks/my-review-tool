@@ -19,7 +19,7 @@
 
   document.addEventListener("keydown", function (e) {
     // Escape hides a keyboard-focused tooltip (.tip:focus-within)
-    if (e.key === "Escape" && document.activeElement && document.activeElement.matches(".tip-btn")) {
+    if (e.key === "Escape" && document.activeElement && document.activeElement.matches(".tip-btn, .tip [role='tooltip']")) {
       document.activeElement.blur();
       return;
     }
