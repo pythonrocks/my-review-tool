@@ -15,13 +15,16 @@ import (
 func TestParsePRs(t *testing.T) {
 	data := []byte(`[
 		{"number":7,"title":"Add <b>","url":"https://github.com/a/b/pull/7","author":{"login":"alice"},"createdAt":"2026-11-01T10:00:00Z","isDraft":true,"headRefOid":"abc123","labels":[{"name":"dependencies","color":"0366d6"},{"name":"go"}],
+		 "additions":1234,"deletions":56,"changedFiles":7,
 		 "reviews":[
 			{"id":"PRR_1","author":{"login":"bob"},"authorAssociation":"MEMBER","body":"","submittedAt":"2026-11-01T11:00:00Z","includesCreatedEdit":false,"reactionGroups":[],"state":"APPROVED","commit":{"oid":"old999"}},
 			{"id":"PRR_2","author":{"login":"Carol"},"authorAssociation":"MEMBER","body":"nit","submittedAt":"2026-11-01T12:00:00Z","includesCreatedEdit":false,"reactionGroups":[],"state":"CHANGES_REQUESTED","commit":{"oid":"abc123"}},
 			{"id":"PRR_3","author":{"login":"carol"},"authorAssociation":"MEMBER","body":"","submittedAt":"2026-11-01T13:00:00Z","includesCreatedEdit":false,"reactionGroups":[],"state":"APPROVED","commit":{"oid":"abc123"}},
 			{"id":"PRR_4","author":null,"authorAssociation":"NONE","body":"lgtm","submittedAt":"2026-11-01T14:00:00Z","includesCreatedEdit":false,"reactionGroups":[],"state":"COMMENTED","commit":{"oid":"abc123"}}
 		 ]},
-		{"number":8,"title":"Fix","url":"https://github.com/a/b/pull/8","author":{"login":""},"createdAt":"2026-11-02T10:00:00Z","isDraft":false}
+		{"number":8,"title":"Fix","url":"https://github.com/a/b/pull/8","author":{"login":""},"createdAt":"2026-11-02T10:00:00Z","isDraft":false},
+		{"number":9,"title":"Empty","url":"https://github.com/a/b/pull/9","author":{"login":"dan"},"createdAt":"2026-11-03T10:00:00Z","additions":0,"deletions":0,"changedFiles":0},
+		{"number":10,"title":"Half","url":"https://github.com/a/b/pull/10","author":{"login":"dan"},"createdAt":"2026-11-03T10:00:00Z","additions":3,"changedFiles":1}
 	]`)
 	prs, err := parsePRs("a/b", data)
 	if err != nil {
@@ -29,8 +32,11 @@ func TestParsePRs(t *testing.T) {
 	}
 	want := []pullRequest{
 		{Repo: "a/b", Title: "Add <b>", URL: "https://github.com/a/b/pull/7", Author: "alice", Labels: []string{"dependencies", "go"}, Number: 7, Draft: true, HeadSHA: "abc123", Created: time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC),
+			Additions: 1234, Deletions: 56, ChangedFiles: 7, HasSize: true,
 			Reviews: []approval{{Login: "bob", Outdated: true, State: "APPROVED"}, {Login: "carol", State: "APPROVED"}, {Login: "ghost", State: "COMMENTED"}}},
 		{Repo: "a/b", Title: "Fix", URL: "https://github.com/a/b/pull/8", Author: "ghost", Number: 8, Created: time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)},
+		{Repo: "a/b", Title: "Empty", URL: "https://github.com/a/b/pull/9", Author: "dan", Number: 9, Created: time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC), HasSize: true}, // a real 0/0 PR
+		{Repo: "a/b", Title: "Half", URL: "https://github.com/a/b/pull/10", Author: "dan", Number: 10, Created: time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)},               // no deletions: no size
 	}
 	if fmt.Sprint(prs) != fmt.Sprint(want) {
 		t.Errorf("parsePRs = %+v\nwant %+v", prs, want)
@@ -140,7 +146,7 @@ func TestRequestedDirectOrTeam(t *testing.T) {
 
 func TestPRListArgs(t *testing.T) {
 	want := []string{"pr", "list", "--repo", "github.com/o/r", "--state", "open", "--limit", "10000",
-		"--json", "number,title,url,author,createdAt,isDraft,headRefOid,labels,reviews"}
+		"--json", "number,title,url,author,createdAt,isDraft,headRefOid,labels,reviews,additions,deletions,changedFiles"}
 	if got := prListArgs("o/r"); !slices.Equal(got, want) {
 		t.Errorf("got %q\nwant %q", got, want)
 	}

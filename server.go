@@ -68,6 +68,7 @@ var funcs = template.FuncMap{
 	"base":        path.Base,
 	"comment":     func(id string) bool { return commentNo(id) > 0 },
 	"runMetrics":  newRunView,
+	"compact":     func(n int) string { return formatTokens(int64(n)) },
 }
 
 // rowData is one dashboard row, rendered by the "row" template for the list and for an htmx Re-run.

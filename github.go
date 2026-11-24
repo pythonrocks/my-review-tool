@@ -22,12 +22,14 @@ const (
 )
 
 type pullRequest struct {
-	Repo, Title, URL, Author, HeadSHA string
-	Labels                            []string // label names
-	Number                            int
-	Draft, Requested                  bool
-	Created                           time.Time
-	Reviews                           []approval // one per user, sorted by login, case-insensitive
+	Repo, Title, URL, Author, HeadSHA  string
+	Labels                             []string // label names
+	Number                             int
+	Draft, Requested                   bool
+	Created                            time.Time
+	Additions, Deletions, ChangedFiles int
+	HasSize                            bool       // Additions and Deletions came from GitHub; false means show no size
+	Reviews                            []approval // one per user, sorted by login, case-insensitive
 }
 
 // approval is a user's review status of a pull request: State is APPROVED, CHANGES_REQUESTED or COMMENTED,
@@ -46,19 +48,20 @@ type globalError string
 
 func (e globalError) Error() string { return string(e) }
 
-// parsePRs decodes `gh pr list --json number,title,url,author,createdAt,isDraft,headRefOid,labels,reviews` output.
+// parsePRs decodes `gh pr list --json number,title,url,author,createdAt,isDraft,headRefOid,labels,reviews,additions,deletions,changedFiles` output.
 // gh reports bot authors with an "app/" prefix, e.g. "app/dependabot", not "dependabot[bot]".
 func parsePRs(repo string, data []byte) ([]pullRequest, error) {
 	var raw []struct {
-		Number     int
-		Title      string
-		URL        string
-		Author     struct{ Login string }
-		CreatedAt  time.Time
-		IsDraft    bool
-		HeadRefOid string
-		Labels     []struct{ Name string }
-		Reviews    []struct {
+		Number                             int
+		Title                              string
+		URL                                string
+		Author                             struct{ Login string }
+		CreatedAt                          time.Time
+		IsDraft                            bool
+		HeadRefOid                         string
+		Labels                             []struct{ Name string }
+		Additions, Deletions, ChangedFiles *int
+		Reviews                            []struct {
 			Author struct{ Login string }
 			State  string
 			Commit struct{ Oid string }
@@ -83,6 +86,12 @@ func parsePRs(repo string, data []byte) ([]pullRequest, error) {
 		}
 		prs = append(prs, pullRequest{Repo: repo, Title: r.Title, URL: r.URL, Author: author, Labels: labels, Number: r.Number, Draft: r.IsDraft, Created: r.CreatedAt, HeadSHA: r.HeadRefOid,
 			Reviews: reviewsOf(reviews, r.HeadRefOid)})
+		if p := &prs[len(prs)-1]; r.Additions != nil && r.Deletions != nil {
+			p.Additions, p.Deletions, p.HasSize = *r.Additions, *r.Deletions, true
+			if r.ChangedFiles != nil {
+				p.ChangedFiles = *r.ChangedFiles
+			}
+		}
 	}
 	return prs, nil
 }
@@ -188,7 +197,7 @@ func prListArgs(repo string) []string {
 	// shortcut: gh does not page nested reviews, so only the oldest 100 reviews of a PR count toward Reviews;
 	// switch to a paged `gh api graphql` query if a watched PR gets more. latestReviews is not used: gh omits its commit.
 	return []string{"pr", "list", "--repo", "github.com/" + repo, "--state", "open",
-		"--limit", "10000", "--json", "number,title,url,author,createdAt,isDraft,headRefOid,labels,reviews"}
+		"--limit", "10000", "--json", "number,title,url,author,createdAt,isDraft,headRefOid,labels,reviews,additions,deletions,changedFiles"}
 }
 
 // ghFetch lists the open pull requests of repo (owner/name) with the gh CLI and flags those requesting the user's review.
