@@ -181,9 +181,9 @@ func TestIndexTable(t *testing.T) {
 	p := newPoller(cfg.Repositories, f.fetch, noLogin)
 	p.poll(context.Background())
 	body := bodyOf(t, cfg, p)
-	header := "<tr><th title=\"Review requested\"><span aria-hidden=\"true\">⭐</span><span class=\"visually-hidden\">Review requested</span></th><th>Repository</th><th>Pull request</th><th>Author</th><th>Age</th><th>Draft</th><th>Status</th><th>Review</th><th>Risk</th><th>Recommendation</th><th></th></tr>"
-	ready := `<tr><td></td><td class="repo"><span class="org">c</span><br>d</td><td class="pr"><a id="pr-c/d-3" href="https://github.com/c/d/pull/3"><span class="num">#3</span>Ready &lt;script&gt;alert(1)&lt;/script&gt;</a></td><td>ghost</td><td class="age">3h</td><td></td><td></td><td><span class="badge status-not-queued">not queued</span></td><td></td><td></td><td class="actions"><a class="btn btn-sm btn-quiet" id="details-c/d-3" href="/pr/c/d/3">Details</a> <form method="post" action="/rerun" hx-post="/rerun" hx-target="closest tr" hx-swap="outerHTML" hx-sync="#pr-list:queue all"><input type="hidden" name="repo" value="c/d"><input type="hidden" name="number" value="3"><input type="hidden" name="filter" value=""><button class="btn-sm btn-quiet" id="rerun-c/d-3">Re-run</button></form></td></tr>`
-	draft := `<tr><td></td><td class="repo"><span class="org">a</span><br>b</td><td class="pr"><a id="pr-a/b-7" href="https://github.com/a/b/pull/7"><span class="num">#7</span>Old draft</a></td><td>alice</td><td class="age">2d</td><td><span class="badge plain">draft</span></td><td></td><td><span class="badge status-not-queued">not queued</span></td><td></td><td></td><td class="actions"><a class="btn btn-sm btn-quiet" id="details-a/b-7" href="/pr/a/b/7">Details</a> <form method="post" action="/rerun" hx-post="/rerun" hx-target="closest tr" hx-swap="outerHTML" hx-sync="#pr-list:queue all"><input type="hidden" name="repo" value="a/b"><input type="hidden" name="number" value="7"><input type="hidden" name="filter" value=""><button class="btn-sm btn-quiet" id="rerun-a/b-7">Re-run</button></form></td></tr>`
+	header := "<tr><th title=\"Review requested\"><span aria-hidden=\"true\">⭐</span><span class=\"visually-hidden\">Review requested</span></th><th>Repository</th><th>Pull request</th><th>Author</th><th>Age</th><th>Size</th><th>Draft</th><th>Status</th><th>Review</th><th>Risk</th><th>Recommendation</th><th></th></tr>"
+	ready := `<tr><td></td><td class="repo"><span class="org">c</span><br>d</td><td class="pr"><a id="pr-c/d-3" href="https://github.com/c/d/pull/3"><span class="num">#3</span>Ready &lt;script&gt;alert(1)&lt;/script&gt;</a></td><td>ghost</td><td class="age">3h</td><td></td><td></td><td></td><td><span class="badge status-not-queued">not queued</span></td><td></td><td></td><td class="actions"><a class="btn btn-sm btn-quiet" id="details-c/d-3" href="/pr/c/d/3">Details</a> <form method="post" action="/rerun" hx-post="/rerun" hx-target="closest tr" hx-swap="outerHTML" hx-sync="#pr-list:queue all"><input type="hidden" name="repo" value="c/d"><input type="hidden" name="number" value="3"><input type="hidden" name="filter" value=""><button class="btn-sm btn-quiet" id="rerun-c/d-3">Re-run</button></form></td></tr>`
+	draft := `<tr><td></td><td class="repo"><span class="org">a</span><br>b</td><td class="pr"><a id="pr-a/b-7" href="https://github.com/a/b/pull/7"><span class="num">#7</span>Old draft</a></td><td>alice</td><td class="age">2d</td><td></td><td><span class="badge plain">draft</span></td><td></td><td><span class="badge status-not-queued">not queued</span></td><td></td><td></td><td class="actions"><a class="btn btn-sm btn-quiet" id="details-a/b-7" href="/pr/a/b/7">Details</a> <form method="post" action="/rerun" hx-post="/rerun" hx-target="closest tr" hx-swap="outerHTML" hx-sync="#pr-list:queue all"><input type="hidden" name="repo" value="a/b"><input type="hidden" name="number" value="7"><input type="hidden" name="filter" value=""><button class="btn-sm btn-quiet" id="rerun-a/b-7">Re-run</button></form></td></tr>`
 	mustContain(t, body, `<div class="table-scroll">`+"\n"+`<table class="pr-table">`)
 	h, r, d := strings.Index(body, header), strings.Index(body, ready), strings.Index(body, draft)
 	if h < 0 || r < 0 || d < 0 || !(h < r && r < d) {
@@ -482,7 +482,7 @@ func TestForeignOrigin(t *testing.T) {
 
 func TestRerunHTMX(t *testing.T) {
 	errRow := func(msg string) string {
-		return `<tr class="row-error"><td colspan="11"><p class="alert alert-error" role="alert">` + msg + `</p></td></tr>`
+		return `<tr class="row-error"><td colspan="12"><p class="alert alert-error" role="alert">` + msg + `</p></td></tr>`
 	}
 	for _, tc := range []struct {
 		name, form string
@@ -1259,5 +1259,41 @@ func TestDetailsMetrics(t *testing.T) {
 				t.Errorf("%s: body has %q", tc.name, a)
 			}
 		}
+	}
+}
+
+func TestPRSize(t *testing.T) {
+	cfg := config{Repositories: []string{"a/b"}, Concurrency: 2}
+	f := &fakeFetch{prs: map[string][]pullRequest{"a/b": {
+		{Repo: "a/b", Number: 1, HeadSHA: "h1", Additions: 1234, Deletions: 56, ChangedFiles: 7, HasSize: true},
+		{Repo: "a/b", Number: 2, HeadSHA: "h2"}, // no size data
+		{Repo: "a/b", Number: 3, HeadSHA: "h3", ChangedFiles: 1, HasSize: true},
+	}}}
+	p := newPoller(cfg.Repositories, f.fetch, noLogin)
+	p.poll(context.Background())
+	q := newReviewQueue(0, workflow{}, resultStore{dir: t.TempDir()})
+	const tip = `title="1234 lines added, 56 removed, 7 files changed"`
+	body := bodyOf(t, cfg, p)
+	mustContain(t, body, `<td class="age">`, `<td><span class="pr-size" `+tip+`><span class="stat-add">+1.2k</span> <span class="stat-del">−56</span></span></td>`,
+		`<span class="stat-add">+0</span> <span class="stat-del">−0</span>`)
+	if n := strings.Count(body, `class="pr-size"`); n != 2 {
+		t.Errorf("want 2 size cells (#1, #3), got %d", n)
+	}
+	_, d := details(t, cfg, p, q, "/pr/a/b/1")
+	mustContain(t, d, `<li `+tip+`>Size <strong><span class="stat-add">+1.2k</span> <span class="stat-del">−56</span></strong> in 7 files</li>`)
+	_, d = details(t, cfg, p, q, "/pr/a/b/3")
+	mustContain(t, d, `in 1 file</li>`)
+	if _, d = details(t, cfg, p, q, "/pr/a/b/2"); strings.Contains(d, "Size <strong>") {
+		t.Errorf("PR without size data shows a Size entry:\n%s", d)
+	}
+
+	// A push: the next poll returns a new head and new numbers.
+	f.prs["a/b"][0] = pullRequest{Repo: "a/b", Number: 1, HeadSHA: "h1b", Additions: 950, Deletions: 23_700, ChangedFiles: 8, HasSize: true}
+	p.poll(context.Background())
+	mustContain(t, bodyOf(t, cfg, p), `<span class="stat-add">+950</span> <span class="stat-del">−23.7k</span>`)
+	_, d = details(t, cfg, p, q, "/pr/a/b/1")
+	mustContain(t, d, `title="950 lines added, 23700 removed, 8 files changed">Size <strong><span class="stat-add">+950</span> <span class="stat-del">−23.7k</span></strong> in 8 files</li>`)
+	if strings.Contains(d, "+1.2k") {
+		t.Error("details page still shows the old numbers")
 	}
 }

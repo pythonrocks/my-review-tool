@@ -20,7 +20,8 @@
 <li>Author <strong>{{.PR.Author}}</strong></li>
 <li>Age <strong>{{age .PR.Created}}</strong></li>
 <li>Draft <strong>{{if .PR.Draft}}yes{{else}}no{{end}}</strong></li>
-{{if and .Review.HeadSHA (or (eq .Review.Status "done") (eq .Review.Status "failed"))}}<li>Reviewed <code class="sha">{{short .Review.HeadSHA}}</code></li>
+{{with .PR}}{{if .HasSize}}<li title="{{.Additions}} lines added, {{.Deletions}} removed, {{.ChangedFiles}} files changed">Size <strong><span class="stat-add">+{{compact .Additions}}</span> <span class="stat-del">−{{compact .Deletions}}</span></strong> in {{.ChangedFiles}} {{if eq .ChangedFiles 1}}file{{else}}files{{end}}</li>
+{{end}}{{end}}{{if and .Review.HeadSHA (or (eq .Review.Status "done") (eq .Review.Status "failed"))}}<li>Reviewed <code class="sha">{{short .Review.HeadSHA}}</code></li>
 {{end}}<li><span class="badge {{statusClass .Review}}">{{if eq .Review.Status "done"}}{{if .Review.Outdated}}outdated: {{end}}done{{else}}{{or (status .Review) "not queued"}}{{end}}</span></li>
 <li>Status <strong>{{(approvals .PR .Login).Text}}</strong></li>
 </ul>
