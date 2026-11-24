@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"regexp"
@@ -655,6 +656,37 @@ func TestDiffUnchangedFallback(t *testing.T) {
 		send(h, http.MethodGet, "/pr/a/b/3?view=diff", nil)
 		if again := reads() - first; again == 0 != c.cached {
 			t.Errorf("%s: %d content calls on the second load, cached %v", c.name, again, c.cached)
+		}
+	}
+}
+
+// countingWriter counts body Writes, the chunks WebKit would get from Wails on macOS.
+type countingWriter struct {
+	*httptest.ResponseRecorder
+	writes int
+}
+
+func (c *countingWriter) Write(p []byte) (int, error) {
+	c.writes++
+	return c.ResponseRecorder.Write(p)
+}
+
+func TestResponseIsOneWrite(t *testing.T) {
+	h, f, _ := diffSetup(t)
+	var patch strings.Builder
+	patch.WriteString("@@ -1,300 +1,300 @@\n")
+	for n := 1; n <= 300; n++ {
+		fmt.Fprintf(&patch, "-old%d\n+new%d\n", n, n)
+	}
+	f.list = []prFile{file("one.go", "modified", patch.String()), file("two.go", "modified", patch.String()), file("three.go", "modified", patch.String())}
+	for _, path := range []string{"/pr/a/b/3?view=diff", "/pr/a/b/3"} {
+		w := &countingWriter{ResponseRecorder: httptest.NewRecorder()}
+		h.ServeHTTP(w, localReq(http.MethodGet, path, ""))
+		if w.Code != http.StatusOK || w.writes != 1 {
+			t.Fatalf("%s = %d with %d writes, want 200 with 1", path, w.Code, w.writes)
+		}
+		if strings.Contains(path, "diff") {
+			mustContain(t, w.Body.String(), "three.go", "new300")
 		}
 	}
 }
